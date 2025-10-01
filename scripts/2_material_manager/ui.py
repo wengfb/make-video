@@ -3,10 +3,15 @@
 提供CLI交互功能
 """
 
+import sys
+import os
 from typing import Optional
-from .manager import MaterialManager
-from .ai_generator import AIImageGenerator
-from .recommender import MaterialRecommender
+
+# 修复相对导入问题
+sys.path.insert(0, os.path.dirname(__file__))
+from manager import MaterialManager
+from ai_generator import AIImageGenerator
+from recommender import MaterialRecommender
 
 
 def material_manager_menu(manager: MaterialManager, generator: AIImageGenerator):

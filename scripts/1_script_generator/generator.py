@@ -4,9 +4,13 @@
 
 import json
 import os
+import sys
 from datetime import datetime
 from typing import Dict, Any, Optional, List
-from .ai_client import AIClient
+
+# 修复相对导入问题 - 添加当前目录到系统路径
+sys.path.insert(0, os.path.dirname(__file__))
+from ai_client import AIClient
 
 
 class ScriptGenerator:

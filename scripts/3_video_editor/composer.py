@@ -9,8 +9,9 @@ import sys
 from typing import Dict, Any, List, Optional, Tuple
 from datetime import datetime
 
-# 导入VideoEditor
-from .editor import VideoEditor
+# 修复相对导入问题 - 导入VideoEditor
+sys.path.insert(0, os.path.dirname(__file__))
+from editor import VideoEditor
 
 # 导入素材推荐器
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '2_material_manager'))
@@ -78,6 +79,7 @@ class VideoComposer:
             raise ValueError("脚本没有章节内容")
 
         all_clips = []
+        temp_clips = []  # 用于跟踪需要清理的临时clip
 
         # 遍历每个章节
         for i, section in enumerate(sections, 1):
@@ -252,18 +254,31 @@ class VideoComposer:
         output_path = os.path.join(self.editor.output_dir, output_filename)
 
         print(f"\n💾 导出视频...")
-        final_video.write_videofile(
-            output_path,
-            fps=self.video_config.get('fps', 24),
-            codec=self.video_config.get('codec', 'libx264'),
-            audio_codec=self.video_config.get('audio_codec', 'aac')
-        )
+        try:
+            final_video.write_videofile(
+                output_path,
+                fps=self.video_config.get('fps', 24),
+                codec=self.video_config.get('codec', 'libx264'),
+                audio_codec=self.video_config.get('audio_codec', 'aac')
+            )
 
-        print(f"\n✅ 视频合成完成: {output_path}")
-        print(f"   时长: {final_video.duration:.1f}秒")
-        print(f"   片段数: {len(all_clips)}")
+            print(f"\n✅ 视频合成完成: {output_path}")
+            print(f"   时长: {final_video.duration:.1f}秒")
+            print(f"   片段数: {len(all_clips)}")
 
-        return output_path
+            return output_path
+
+        finally:
+            # 清理资源 - 防止内存泄漏
+            print("\n🧹 清理临时资源...")
+            try:
+                for clip in all_clips:
+                    if hasattr(clip, 'close'):
+                        clip.close()
+                if hasattr(final_video, 'close'):
+                    final_video.close()
+            except Exception as e:
+                print(f"   ⚠️  清理资源时出现警告: {str(e)}")
 
     def compose_with_custom_materials(
         self,

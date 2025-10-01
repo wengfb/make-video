@@ -106,6 +106,17 @@ def interactive_mode():
     print("\n欢迎使用科普视频自动化制作系统！")
     print("=" * 60)
 
+    # 快速依赖检查
+    from scripts.utils.dependency_checker import quick_check
+    print("\n⏳ 检查系统环境...")
+    if not quick_check():
+        print("\n❌ 环境检查失败!")
+        print("\n请执行以下命令进行完整检查:")
+        print("  python scripts/utils/dependency_checker.py")
+        print("\n或安装缺少的依赖:")
+        print("  pip install -r requirements.txt")
+        return
+
     # 初始化
     try:
         script_gen = ScriptGenerator()
