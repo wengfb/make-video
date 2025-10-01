@@ -163,13 +163,33 @@ def quick_check():
     """快速检查 - 仅检查核心依赖"""
     checker = DependencyChecker()
 
-    # 核心包
-    packages = ['openai', 'requests', 'numpy', 'moviepy']
+    # 核心包（V5.0更新）
+    core_packages = [
+        ('openai', 'openai', True),
+        ('requests', 'requests', True),
+        ('numpy', 'numpy', True),
+        ('moviepy', 'moviepy', True),
+        ('Pillow', 'PIL', True),
+        ('imageio', 'imageio', True),
+    ]
 
-    for pkg in packages:
-        import_name = 'PIL' if pkg == 'Pillow' else pkg
-        if not checker.check_package(pkg, import_name, True):
-            return False
+    # V5.0新增可选包
+    optional_packages = [
+        ('edge-tts', 'edge_tts', False),
+        ('pysrt', 'pysrt', False),
+    ]
+
+    # 检查核心包
+    for pkg_name, import_name, required in core_packages:
+        if not checker.check_package(pkg_name, import_name, required):
+            pass  # 错误已记录
+
+    # 检查可选包（不影响返回结果）
+    for pkg_name, import_name, required in optional_packages:
+        checker.check_package(pkg_name, import_name, required)
+
+    # FFmpeg检查
+    checker.check_ffmpeg()
 
     return len(checker.errors) == 0
 

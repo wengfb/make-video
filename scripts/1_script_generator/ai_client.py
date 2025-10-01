@@ -5,6 +5,7 @@ AI客户端封装
 
 import json
 import os
+import time
 from typing import Dict, Any, Optional
 import requests
 
@@ -48,7 +49,7 @@ class AIClient:
             raise ValueError(f"不支持的AI提供商: {self.provider}")
 
     def _generate_openai(self, prompt: str, system_prompt: Optional[str] = None) -> str:
-        """调用OpenAI API"""
+        """调用OpenAI API (带重试机制)"""
         headers = {
             'Authorization': f'Bearer {self.api_key}',
             'Content-Type': 'application/json'
@@ -66,18 +67,57 @@ class AIClient:
             'max_tokens': self.max_tokens
         }
 
-        try:
-            response = requests.post(
-                f'{self.base_url}/chat/completions',
-                headers=headers,
-                json=data,
-                timeout=60
-            )
-            response.raise_for_status()
-            result = response.json()
-            return result['choices'][0]['message']['content']
-        except requests.exceptions.RequestException as e:
-            raise Exception(f"API调用失败: {str(e)}")
+        # 重试机制：最多3次，指数退避
+        max_retries = 3
+        retry_delays = [1, 2, 4]  # 秒
+
+        for attempt in range(max_retries):
+            try:
+                response = requests.post(
+                    f'{self.base_url}/chat/completions',
+                    headers=headers,
+                    json=data,
+                    timeout=60
+                )
+                response.raise_for_status()
+                result = response.json()
+                return result['choices'][0]['message']['content']
+
+            except requests.exceptions.Timeout as e:
+                # 超时错误，可重试
+                if attempt < max_retries - 1:
+                    delay = retry_delays[attempt]
+                    print(f"\n⚠️  API请求超时，{delay}秒后重试 ({attempt + 1}/{max_retries})...")
+                    time.sleep(delay)
+                else:
+                    raise Exception(f"API调用超时（已重试{max_retries}次）: {str(e)}")
+
+            except requests.exceptions.ConnectionError as e:
+                # 网络连接错误，可重试
+                if attempt < max_retries - 1:
+                    delay = retry_delays[attempt]
+                    print(f"\n⚠️  网络连接错误，{delay}秒后重试 ({attempt + 1}/{max_retries})...")
+                    time.sleep(delay)
+                else:
+                    raise Exception(f"网络连接失败（已重试{max_retries}次）: {str(e)}")
+
+            except requests.exceptions.HTTPError as e:
+                # HTTP错误，检查是否可重试
+                if e.response.status_code in [429, 500, 502, 503, 504]:
+                    # 限流或服务器错误，可重试
+                    if attempt < max_retries - 1:
+                        delay = retry_delays[attempt]
+                        print(f"\n⚠️  API错误 ({e.response.status_code})，{delay}秒后重试 ({attempt + 1}/{max_retries})...")
+                        time.sleep(delay)
+                    else:
+                        raise Exception(f"API调用失败（已重试{max_retries}次）: {str(e)}")
+                else:
+                    # 其他HTTP错误（如401认证失败），不重试
+                    raise Exception(f"API调用失败: {str(e)}")
+
+            except requests.exceptions.RequestException as e:
+                # 其他请求错误
+                raise Exception(f"API调用失败: {str(e)}")
 
     def _generate_anthropic(self, prompt: str, system_prompt: Optional[str] = None) -> str:
         """调用Anthropic API"""
@@ -127,13 +167,26 @@ class AIClient:
         try:
             # 尝试直接解析
             return json.loads(response)
-        except json.JSONDecodeError:
+        except json.JSONDecodeError as e1:
             # 尝试提取代码块中的JSON
-            if '```json' in response:
-                json_str = response.split('```json')[1].split('```')[0].strip()
-                return json.loads(json_str)
-            elif '```' in response:
-                json_str = response.split('```')[1].split('```')[0].strip()
-                return json.loads(json_str)
-            else:
-                raise ValueError(f"无法解析JSON响应: {response[:200]}...")
+            try:
+                if '```json' in response:
+                    json_str = response.split('```json')[1].split('```')[0].strip()
+                    return json.loads(json_str)
+                elif '```' in response:
+                    json_str = response.split('```')[1].split('```')[0].strip()
+                    return json.loads(json_str)
+                else:
+                    # 最后尝试：查找第一个{或[，提取到最后一个}或]
+                    import re
+                    json_match = re.search(r'[\{\[].*[\}\]]', response, re.DOTALL)
+                    if json_match:
+                        json_str = json_match.group(0)
+                        return json.loads(json_str)
+                    else:
+                        raise ValueError("响应中未找到JSON格式内容")
+            except (json.JSONDecodeError, IndexError, ValueError) as e2:
+                # 所有解析尝试失败，返回错误信息
+                error_msg = f"无法解析JSON响应。原始错误: {str(e1)}\n响应内容: {response[:500]}..."
+                print(f"\n❌ JSON解析失败: {error_msg}")
+                raise ValueError(error_msg)

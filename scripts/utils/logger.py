@@ -2,6 +2,15 @@
 """
 日志系统配置
 统一的日志管理
+
+使用示例:
+    from scripts.utils.logger import get_logger
+
+    logger = get_logger(__name__)
+    logger.info("信息日志")
+    logger.warning("警告日志")
+    logger.error("错误日志")
+    logger.debug("调试日志")
 """
 
 import logging
@@ -20,11 +29,16 @@ class LoggerSetup:
 
         Args:
             name: 日志记录器名称
-            level: 日志级别
+            level: 日志级别 (DEBUG, INFO, WARNING, ERROR, CRITICAL)
             log_to_file: 是否输出到文件
 
         Returns:
             logger实例
+
+        使用建议:
+            - 开发调试: level=logging.DEBUG
+            - 生产环境: level=logging.INFO
+            - 仅错误: level=logging.ERROR
         """
         logger = logging.getLogger(name)
         logger.setLevel(level)

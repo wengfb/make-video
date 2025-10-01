@@ -106,6 +106,23 @@ def interactive_mode():
     print("\n欢迎使用科普视频自动化制作系统！")
     print("=" * 60)
 
+    # 首次运行检查
+    from init_project import check_initialization
+    if not check_initialization():
+        print("\n⚠️  检测到项目未初始化")
+        print("=" * 60)
+        print("\n是否现在初始化项目? (Y/n)")
+        choice = input().strip().lower()
+        if choice != 'n':
+            from init_project import init_project
+            init_project()
+            print("\n请重新运行程序: python main.py")
+            return
+        else:
+            print("\n❌ 项目未初始化，无法继续")
+            print("请运行: python init_project.py")
+            return
+
     # 快速依赖检查
     from scripts.utils.dependency_checker import quick_check
     print("\n⏳ 检查系统环境...")

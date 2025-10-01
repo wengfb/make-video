@@ -78,8 +78,10 @@ class VideoComposer:
         if not sections:
             raise ValueError("脚本没有章节内容")
 
+        # 初始化clips列表(必须在try外部,确保finally可以访问)
         all_clips = []
         temp_clips = []  # 用于跟踪需要清理的临时clip
+        audio_clips = []  # 用于跟踪音频clips
 
         # 遍历每个章节
         for i, section in enumerate(sections, 1):
@@ -159,10 +161,11 @@ class VideoComposer:
 
                 if audio_files:
                     # 合并所有TTS音频
-                    audio_clips = [AudioFileClip(f) for f in audio_files if os.path.exists(f)]
-                    if audio_clips:
+                    tts_audio_clips = [AudioFileClip(f) for f in audio_files if os.path.exists(f)]
+                    audio_clips.extend(tts_audio_clips)  # 追踪以便清理
+                    if tts_audio_clips:
                         from moviepy.editor import concatenate_audioclips
-                        tts_audio = concatenate_audioclips(audio_clips)
+                        tts_audio = concatenate_audioclips(tts_audio_clips)
 
                         # 添加BGM作为背景(降低音量)
                         bgm_path = self.video_config.get('default_bgm')
@@ -272,11 +275,28 @@ class VideoComposer:
             # 清理资源 - 防止内存泄漏
             print("\n🧹 清理临时资源...")
             try:
+                # 清理视频clips
                 for clip in all_clips:
-                    if hasattr(clip, 'close'):
-                        clip.close()
-                if hasattr(final_video, 'close'):
-                    final_video.close()
+                    if clip and hasattr(clip, 'close'):
+                        try:
+                            clip.close()
+                        except:
+                            pass
+
+                # 清理音频clips
+                for clip in audio_clips:
+                    if clip and hasattr(clip, 'close'):
+                        try:
+                            clip.close()
+                        except:
+                            pass
+
+                # 清理最终视频
+                if 'final_video' in locals() and hasattr(final_video, 'close'):
+                    try:
+                        final_video.close()
+                    except:
+                        pass
             except Exception as e:
                 print(f"   ⚠️  清理资源时出现警告: {str(e)}")
 

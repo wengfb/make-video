@@ -4,6 +4,11 @@ API成本估算和控制工具
 帮助用户了解和控制API使用成本
 """
 
+import json
+from pathlib import Path
+from datetime import datetime
+from typing import Dict, Any
+
 
 class CostEstimator:
     """API成本估算器"""
@@ -210,6 +215,101 @@ class CostEstimator:
         choice = input(f"\n是否继续? (Y/n): ").strip().lower()
 
         return choice != 'n'
+
+    @staticmethod
+    def track_cost(operation: str, cost: float, details: Dict[str, Any] = None):
+        """
+        记录实际API使用成本
+
+        Args:
+            operation: 操作类型 (topic, script, image, tts, etc.)
+            cost: 实际成本
+            details: 详细信息
+        """
+        costs_file = Path("data/costs.json")
+
+        # 加载现有数据
+        if costs_file.exists():
+            with open(costs_file, 'r', encoding='utf-8') as f:
+                data = json.load(f)
+        else:
+            data = {
+                "total_cost": 0.0,
+                "sessions": [],
+                "last_updated": None
+            }
+
+        # 添加新记录
+        session = {
+            "timestamp": datetime.now().isoformat(),
+            "operation": operation,
+            "cost": cost,
+            "details": details or {}
+        }
+
+        data["sessions"].append(session)
+        data["total_cost"] = round(data["total_cost"] + cost, 4)
+        data["last_updated"] = datetime.now().isoformat()
+
+        # 保存
+        costs_file.parent.mkdir(parents=True, exist_ok=True)
+        with open(costs_file, 'w', encoding='utf-8') as f:
+            json.dump(data, f, ensure_ascii=False, indent=2)
+
+    @staticmethod
+    def get_total_cost() -> float:
+        """
+        获取累计成本
+
+        Returns:
+            总成本（美元）
+        """
+        costs_file = Path("data/costs.json")
+
+        if costs_file.exists():
+            with open(costs_file, 'r', encoding='utf-8') as f:
+                data = json.load(f)
+                return data.get("total_cost", 0.0)
+
+        return 0.0
+
+    @staticmethod
+    def print_cost_summary():
+        """打印成本汇总"""
+        costs_file = Path("data/costs.json")
+
+        if not costs_file.exists():
+            print("\n💰 成本统计: 暂无数据")
+            return
+
+        with open(costs_file, 'r', encoding='utf-8') as f:
+            data = json.load(f)
+
+        print("\n" + "=" * 60)
+        print("💰 API成本统计")
+        print("=" * 60)
+        print(f"\n累计总成本: ${data['total_cost']:.4f} USD")
+        print(f"记录数: {len(data['sessions'])}")
+
+        if data['last_updated']:
+            print(f"最后更新: {data['last_updated']}")
+
+        # 按操作类型分组
+        by_operation = {}
+        for session in data['sessions']:
+            op = session['operation']
+            cost = session['cost']
+            if op not in by_operation:
+                by_operation[op] = {'count': 0, 'cost': 0.0}
+            by_operation[op]['count'] += 1
+            by_operation[op]['cost'] += cost
+
+        if by_operation:
+            print(f"\n按操作类型分类:")
+            for op, stats in sorted(by_operation.items(), key=lambda x: x[1]['cost'], reverse=True):
+                print(f"  {op}: {stats['count']}次, ${stats['cost']:.4f}")
+
+        print("=" * 60)
 
 
 # 命令行测试
