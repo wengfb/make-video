@@ -1,0 +1,181 @@
+{
+  "script_templates": {
+    "popular_science": {
+      "name": "科普视频模板",
+      "description": "适合3-5分钟的科普短视频",
+      "structure": [
+        {
+          "section": "hook",
+          "name": "开场钩子",
+          "duration": "10-15秒",
+          "prompt": "创建一个引人入胜的开场，可以是一个令人惊讶的事实、一个问题或一个有趣的场景，用来吸引观众的注意力。"
+        },
+        {
+          "section": "introduction",
+          "name": "主题介绍",
+          "duration": "20-30秒",
+          "prompt": "简要介绍本期视频要讲解的科学主题，让观众明白将要学到什么。"
+        },
+        {
+          "section": "background",
+          "name": "背景知识",
+          "duration": "30-45秒",
+          "prompt": "提供必要的背景知识和基础概念，确保观众能够理解后续内容。使用通俗易懂的语言和生活化的类比。"
+        },
+        {
+          "section": "main_content",
+          "name": "核心内容",
+          "duration": "90-120秒",
+          "prompt": "深入讲解科学原理、实验过程或现象解释。分成2-3个要点，每个要点都有清晰的解释和例子。使用图表、动画等视觉元素辅助说明。"
+        },
+        {
+          "section": "application",
+          "name": "实际应用",
+          "duration": "30-45秒",
+          "prompt": "说明这个科学知识在现实生活中的应用或意义，让观众感受到知识的价值。"
+        },
+        {
+          "section": "summary",
+          "name": "总结回顾",
+          "duration": "15-20秒",
+          "prompt": "简明扼要地总结本期视频的核心要点，加深观众记忆。"
+        },
+        {
+          "section": "cta",
+          "name": "行动号召",
+          "duration": "5-10秒",
+          "prompt": "引导观众点赞、评论、关注，或预告下期内容。"
+        }
+      ]
+    },
+
+    "experiment_demo": {
+      "name": "实验演示模板",
+      "description": "适合展示科学实验的视频",
+      "structure": [
+        {
+          "section": "hook",
+          "name": "开场钩子",
+          "duration": "10-15秒",
+          "prompt": "展示实验的惊艳效果或提出一个有趣的问题。"
+        },
+        {
+          "section": "hypothesis",
+          "name": "实验假设",
+          "duration": "20-30秒",
+          "prompt": "介绍实验要验证什么，为什么要做这个实验。"
+        },
+        {
+          "section": "materials",
+          "name": "材料准备",
+          "duration": "20-30秒",
+          "prompt": "列出实验所需的材料和工具。"
+        },
+        {
+          "section": "procedure",
+          "name": "实验步骤",
+          "duration": "90-120秒",
+          "prompt": "详细讲解实验步骤，配合实际操作画面。"
+        },
+        {
+          "section": "explanation",
+          "name": "原理解释",
+          "duration": "45-60秒",
+          "prompt": "解释实验背后的科学原理。"
+        },
+        {
+          "section": "conclusion",
+          "name": "结论",
+          "duration": "15-20秒",
+          "prompt": "总结实验结果和学到的知识。"
+        }
+      ]
+    },
+
+    "concept_explanation": {
+      "name": "概念解释模板",
+      "description": "适合解释抽象科学概念",
+      "structure": [
+        {
+          "section": "hook",
+          "name": "开场",
+          "duration": "10-15秒",
+          "prompt": "用一个日常现象引出要解释的概念。"
+        },
+        {
+          "section": "definition",
+          "name": "概念定义",
+          "duration": "30-40秒",
+          "prompt": "给出概念的清晰定义，使用简单的语言。"
+        },
+        {
+          "section": "analogy",
+          "name": "类比说明",
+          "duration": "45-60秒",
+          "prompt": "使用生活中的类比帮助理解抽象概念。"
+        },
+        {
+          "section": "examples",
+          "name": "实例展示",
+          "duration": "60-90秒",
+          "prompt": "举2-3个具体例子，从不同角度说明概念。"
+        },
+        {
+          "section": "misconceptions",
+          "name": "常见误区",
+          "duration": "30-45秒",
+          "prompt": "澄清关于这个概念的常见误解。"
+        },
+        {
+          "section": "summary",
+          "name": "总结",
+          "duration": "15-20秒",
+          "prompt": "总结要点，加深理解。"
+        }
+      ]
+    }
+  },
+
+  "prompt_templates": {
+    "script_generation": "你是一位专业的科普视频脚本撰写专家。请根据以下要求创建一个视频脚本：\n\n主题：{topic}\n目标受众：{audience}\n视频时长：{duration}\n视频风格：{style}\n\n请按照以下结构创建脚本：\n{structure}\n\n要求：\n1. 语言通俗易懂，避免过于专业的术语\n2. 使用生动的例子和类比\n3. 保持内容的科学准确性\n4. 注明每个部分的预计时长\n5. 标注需要配合的视觉元素（图片、动画、图表等）\n6. 保持叙事流畅，逻辑清晰\n\n请以JSON格式输出，包含：\n- title: 视频标题\n- sections: 各部分内容数组，每部分包含section_name, duration, narration（旁白文本）, visual_notes（视觉提示）",
+
+    "hook_generation": "创建一个吸引人的视频开场（10-15秒），主题是：{topic}。要求：\n1. 引人入胜，激发好奇心\n2. 可以是一个惊人的事实、一个问题或一个有趣的场景\n3. 与主题紧密相关\n4. 语言简洁有力",
+
+    "visual_suggestion": "基于以下脚本内容，建议合适的视觉元素：\n\n{script_content}\n\n请提供：\n1. 需要的图片类型和内容\n2. 动画效果建议\n3. 图表或示意图需求\n4. 镜头运用建议",
+
+    "title_generation": "基于以下视频脚本，生成5个吸引人的标题选项：\n\n{script_summary}\n\n要求：\n1. 简洁明了，不超过20个字\n2. 吸引眼球，激发点击欲望\n3. 准确反映内容\n4. 适合B站/抖音等平台",
+
+    "topic_generation": "你是一位科普视频选题专家。请根据以下要求生成{count}个视频主题建议：\n\n科学领域：{field}\n目标受众：{audience}\n视频风格：{style}\n\n请以JSON格式输出，包含topics数组，每个主题包含：\n- title: 主题标题（简洁有吸引力）\n- description: 主题描述（100字以内）\n- difficulty: 难度等级（easy/medium/hard）\n- estimated_popularity: 预估热度（low/medium/high）\n- key_points: 核心知识点列表（3-5个）\n- visual_potential: 视觉呈现潜力（low/medium/high）\n- target_duration: 建议视频时长\n- why_interesting: 为什么这个主题有趣（吸引力说明）\n- related_topics: 相关主题列表（2-3个）\n\n要求：\n1. 主题要有科学性和趣味性\n2. 适合视频化呈现\n3. 考虑目标受众的知识水平\n4. 包含多样化的选题角度",
+
+    "trending_topics": "你是一位科普视频趋势分析专家。请基于当前科技热点和大众关注度，生成{count}个热门/趋势科普视频主题：\n\n请以JSON格式输出，包含topics数组，每个主题包含：\n- title: 主题标题\n- description: 主题描述\n- trend_reason: 为什么是热门话题\n- urgency: 时效性（high/medium/low）\n- difficulty: 难度等级\n- estimated_popularity: 预估热度\n- key_points: 核心知识点\n- target_audience: 适合受众\n- competition_level: 竞争程度（low/medium/high）\n\n要求：\n1. 关注当前科技新闻和热点\n2. 考虑大众关注度和话题性\n3. 平衡科学性和流行性\n4. 包含不同领域的热点",
+
+    "expand_topic": "你是一位科普视频策划专家。请详细扩展以下主题：\n\n主题：{topic}\n\n请以JSON格式输出，包含：\n- title: 主题标题\n- detailed_description: 详细描述（200-300字）\n- difficulty: 难度等级\n- target_audience: 目标受众\n- key_concepts: 核心概念列表（5-8个）\n- outline: 内容大纲（3-5个部分）\n- visual_suggestions: 视觉呈现建议（具体的图片、动画、实验等）\n- script_structure: 建议的脚本结构\n- common_misconceptions: 常见误区（2-3个）\n- fun_facts: 有趣的事实（2-3个）\n- resources: 参考资源建议\n- estimated_production_difficulty: 制作难度评估（easy/medium/hard）\n\n要求：\n1. 提供全面的主题分析\n2. 给出具体可操作的建议\n3. 考虑实际制作的可行性",
+
+    "analyze_topic": "你是一位视频选题分析专家。请分析以下主题的潜力：\n\n标题：{title}\n描述：{description}\n\n请以JSON格式输出分析结果：\n- popularity_score: 热度评分（1-10）\n- difficulty_score: 难度评分（1-10，10最难）\n- visual_potential_score: 视觉呈现潜力（1-10）\n- audience_appeal: 受众吸引力（broad/niche/mixed）\n- uniqueness_score: 独特性评分（1-10）\n- timeliness_score: 时效性评分（1-10）\n- educational_value: 教育价值（low/medium/high）\n- entertainment_value: 娱乐价值（low/medium/high）\n- pros: 优势列表（3-5个）\n- cons: 劣势/挑战列表（2-3个）\n- recommendations: 改进建议（2-3个）\n- similar_successful_content: 类似的成功案例（如果有）\n\n要求：\n1. 客观评估各项指标\n2. 提供具体的理由\n3. 给出实用的建议",
+
+    "topic_variations": "基于主题「{topic}」，生成{count}个有趣的变体或相关主题：\n\n请以JSON格式输出，包含variations数组，每个变体包含：\n- title: 变体标题\n- description: 简短描述\n- variation_type: 变体类型（angle_change/depth_change/audience_change/application_focus等）\n- how_different: 与原主题的差异说明\n- potential_advantage: 潜在优势\n\n要求：\n1. 保持与原主题的相关性\n2. 提供不同的切入角度\n3. 考虑不同的呈现方式\n4. 每个变体都要有独特价值"
+  },
+
+  "visual_templates": {
+    "intro": {
+      "duration": 3,
+      "elements": [
+        "logo动画",
+        "片头音效",
+        "主题文字淡入"
+      ]
+    },
+    "outro": {
+      "duration": 5,
+      "elements": [
+        "总结文字",
+        "点赞关注提示",
+        "背景音乐淡出"
+      ]
+    },
+    "transition": {
+      "types": ["淡入淡出", "左右滑动", "缩放", "翻页效果"],
+      "duration": 0.5
+    }
+  }
+}

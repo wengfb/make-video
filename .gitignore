@@ -1,0 +1,71 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# 虚拟环境
+venv/
+ENV/
+env/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# 配置文件（包含API密钥）
+config/settings.json
+
+# 但保留示例配置
+!config/settings.example.json
+
+# 输出文件
+output/scripts/*
+output/subtitles/*
+output/videos/*
+
+# 但保留目录
+!output/scripts/.gitkeep
+!output/subtitles/.gitkeep
+!output/videos/.gitkeep
+
+# 素材文件
+materials/images/*
+materials/videos/*
+materials/audio/*
+materials/fonts/*
+
+# 但保留目录
+!materials/images/.gitkeep
+!materials/videos/.gitkeep
+!materials/audio/.gitkeep
+!materials/fonts/.gitkeep
+
+# 日志
+*.log
+
+# 系统文件
+.DS_Store
+Thumbs.db
+
+# 环境变量
+.env

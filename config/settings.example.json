@@ -1,0 +1,74 @@
+{
+  "project": {
+    "name": "科普视频自动化制作系统",
+    "version": "1.0.0",
+    "author": "AI Assistant"
+  },
+
+  "ai": {
+    "provider": "openai",
+    "model": "gpt-4",
+    "api_key": "YOUR_API_KEY_HERE",
+    "base_url": "https://api.openai.com/v1",
+    "temperature": 0.7,
+    "max_tokens": 2000
+  },
+
+  "video": {
+    "default_duration": 180,
+    "resolution": {
+      "width": 1920,
+      "height": 1080
+    },
+    "fps": 30,
+    "output_format": "mp4",
+    "codec": "libx264",
+    "bitrate": "5000k"
+  },
+
+  "subtitle": {
+    "font": "Arial",
+    "font_size": 48,
+    "font_color": "white",
+    "bg_color": "black",
+    "bg_opacity": 0.5,
+    "position": "bottom",
+    "language": "zh-CN"
+  },
+
+  "paths": {
+    "materials": "./materials",
+    "templates": "./templates",
+    "output": "./output",
+    "scripts": "./output/scripts",
+    "subtitles": "./output/subtitles",
+    "videos": "./output/videos"
+  },
+
+  "script_generator": {
+    "default_style": "popular_science",
+    "target_audience": "general_public",
+    "video_length": "3-5min",
+    "language": "zh-CN",
+    "include_hook": true,
+    "include_cta": true
+  },
+
+  "ai_image": {
+    "provider": "dalle",
+    "model": "dall-e-3",
+    "api_key": "YOUR_DALLE_API_KEY_HERE",
+    "default_size": "1024x1024",
+    "default_quality": "standard",
+    "default_style": "educational illustration, clean, simple, colorful",
+    "api_url": "",
+    "sd_api_key": ""
+  },
+
+  "material_manager": {
+    "auto_tag": true,
+    "auto_categorize": true,
+    "default_category": "uncategorized",
+    "max_file_size_mb": 100
+  }
+}

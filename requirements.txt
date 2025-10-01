@@ -1,0 +1,64 @@
+# ============================================
+# V4.0 科普视频自动化系统 - 完整依赖列表
+# ============================================
+
+# 核心依赖
+requests>=2.31.0
+numpy>=1.24.0
+
+# AI服务（必选其一）
+# - OpenAI API (GPT + DALL-E)
+openai>=1.0.0
+
+# - Anthropic Claude (可选，作为GPT替代)
+# anthropic>=0.7.0
+
+# 视频处理（V4.0新增）
+moviepy>=1.0.3
+imageio>=2.31.0
+imageio-ffmpeg>=0.4.9
+
+# 图像处理（V3.0-V4.0使用）
+Pillow>=10.0.0
+
+# 音频处理（可选，用于高级音频功能）
+# pydub>=0.25.1
+# librosa>=0.10.0
+
+# 字幕处理（未来功能）
+# pysrt>=1.1.2
+# ass>=0.5.2
+
+# 工具库
+python-dotenv>=1.0.0  # 环境变量管理
+
+# ============================================
+# 系统依赖说明
+# ============================================
+# 1. FFmpeg: moviepy依赖FFmpeg进行视频编码
+#    - Ubuntu/Debian: sudo apt-get install ffmpeg
+#    - macOS: brew install ffmpeg
+#    - Windows: 下载并添加到PATH
+#
+# 2. ImageMagick: TextClip功能需要（可选）
+#    - Ubuntu/Debian: sudo apt-get install imagemagick
+#    - macOS: brew install imagemagick
+#    - Windows: 下载安装包
+#
+# 3. API密钥配置:
+#    在 config/settings.json 中配置:
+#    - OpenAI API Key (用于GPT和DALL-E)
+#
+# ============================================
+# 安装说明
+# ============================================
+# 完整安装:
+#   pip install -r requirements.txt
+#
+# 最小安装（仅脚本生成）:
+#   pip install requests openai
+#
+# 视频制作安装（推荐）:
+#   pip install requests openai moviepy Pillow numpy
+#
+# ============================================
