@@ -127,30 +127,68 @@ def create_example_data():
         return
 
     # 创建示例主题
-    example_topic = {
-        "id": "example-001",
-        "title": "量子计算的奇妙世界",
-        "description": "探索量子计算的基本原理和未来应用",
-        "field": "物理学",
-        "audience": "大众",
-        "difficulty": "medium",
-        "keywords": ["量子计算", "量子比特", "叠加态", "纠缠"],
-        "rating": 5,
-        "created_at": "2025-01-01T00:00:00",
-        "is_favorite": False
-    }
+    example_topics = [
+        {
+            "id": "example-001",
+            "title": "量子计算的奇妙世界",
+            "description": "探索量子计算的基本原理和未来应用",
+            "field": "物理学",
+            "audience": "大众",
+            "difficulty": "medium",
+            "keywords": ["量子计算", "量子比特", "叠加态", "纠缠"],
+            "rating": 5,
+            "created_at": "2025-01-01T00:00:00",
+            "is_favorite": False
+        },
+        {
+            "id": "example-002",
+            "title": "人工智能如何学习",
+            "description": "揭秘机器学习和神经网络的工作原理",
+            "field": "计算机科学",
+            "audience": "大众",
+            "difficulty": "medium",
+            "keywords": ["人工智能", "机器学习", "神经网络", "深度学习"],
+            "rating": 4,
+            "created_at": "2025-01-01T00:00:00",
+            "is_favorite": True
+        },
+        {
+            "id": "example-003",
+            "title": "DNA的秘密",
+            "description": "了解遗传信息的存储和传递机制",
+            "field": "生物学",
+            "audience": "大众",
+            "difficulty": "easy",
+            "keywords": ["DNA", "遗传", "基因", "生物学"],
+            "rating": 5,
+            "created_at": "2025-01-01T00:00:00",
+            "is_favorite": True
+        }
+    ]
 
     try:
         with open('data/topics.json', 'r', encoding='utf-8') as f:
             topics_data = json.load(f)
 
-        topics_data['topics'].append(example_topic)
-        topics_data['metadata']['total_count'] = 1
+        topics_data['topics'].extend(example_topics)
+        topics_data['metadata']['total_count'] = len(example_topics)
 
         with open('data/topics.json', 'w', encoding='utf-8') as f:
             json.dump(topics_data, f, ensure_ascii=False, indent=2)
 
-        print("  ✓ 已创建示例主题")
+        # 添加收藏
+        with open('data/favorites.json', 'r', encoding='utf-8') as f:
+            favorites_data = json.load(f)
+
+        favorites = [t['id'] for t in example_topics if t.get('is_favorite')]
+        favorites_data['favorites'].extend(favorites)
+        favorites_data['metadata']['total_count'] = len(favorites)
+
+        with open('data/favorites.json', 'w', encoding='utf-8') as f:
+            json.dump(favorites_data, f, ensure_ascii=False, indent=2)
+
+        print(f"  ✓ 已创建 {len(example_topics)} 个示例主题")
+        print(f"  ✓ 已添加 {len(favorites)} 个收藏")
     except Exception as e:
         print(f"  ❌ 创建示例数据失败: {e}")
 

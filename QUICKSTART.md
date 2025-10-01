@@ -1,124 +1,133 @@
-# 快速上手指南
+# 快速开始指南（5分钟）
 
-## 5分钟快速开始
+本指南帮助你快速运行项目并生成第一个视频。
 
-### 步骤1: 安装依赖
+---
 
-```bash
-pip install requests
-```
-
-### 步骤2: 配置API密钥
-
-**方法A: 修改配置文件**
-
-编辑 `config/settings.json`：
-
-```json
-{
-  "ai": {
-    "provider": "openai",
-    "model": "gpt-4",
-    "api_key": "sk-xxxxxxxxxxxxxxxx",  // 在这里填入你的API密钥
-    ...
-  }
-}
-```
-
-**方法B: 使用环境变量**（推荐）
+## ⚡ 最快路径（已有FFmpeg和API密钥）
 
 ```bash
-# Linux/Mac
-export OPENAI_API_KEY="sk-xxxxxxxxxxxxxxxx"
+# 1. 安装依赖
+pip install -r requirements.txt
 
-# Windows PowerShell
-$env:OPENAI_API_KEY="sk-xxxxxxxxxxxxxxxx"
+# 2. 初始化
+python init_data.py
+
+# 3. 配置API密钥（编辑 config/settings.json）
+# "api_key": "sk-your-key-here"
+
+# 4. 运行程序
+python main.py
 ```
 
-### 步骤3: 运行程序
+---
+
+## 📋 详细步骤
+
+### 步骤1：检查系统依赖 ✓
+
+**必需：FFmpeg**
+
+```bash
+# 检查是否已安装
+ffmpeg -version
+
+# 如果未安装：
+# Ubuntu/Debian
+sudo apt-get install ffmpeg
+
+# macOS
+brew install ffmpeg
+```
+
+### 步骤2：安装Python依赖 ✓
+
+```bash
+cd make-video
+pip install -r requirements.txt
+```
+
+### 步骤3：初始化项目 ✓
+
+```bash
+python init_data.py
+# 按提示操作，选择 y 创建示例数据
+```
+
+### 步骤4：配置API密钥 ✓
+
+```bash
+# 编辑 config/settings.json
+# 将 "api_key": "YOUR_API_KEY_HERE" 改为你的OpenAI密钥
+```
+
+获取API密钥：https://platform.openai.com/api-keys
+
+### 步骤5：准备素材 🎨
+
+```bash
+# 下载10-20张科普图片到 materials/images/
+# 推荐网站：unsplash.com, pexels.com
+
+# 检查素材状态
+python check_materials.py
+```
+
+### 步骤6：运行程序 🚀
 
 ```bash
 python main.py
 ```
 
-### 步骤4: 生成你的第一个脚本
+---
 
-在交互界面中：
+## 🎬 生成第一个视频
 
-1. 选择 `1` (生成视频脚本)
-2. 输入主题，例如: `为什么天空是蓝色的`
-3. 选择模板 `1` (科普视频模板)
-4. 其他选项可以直接回车使用默认值
-5. 等待AI生成
-6. 输入 `Y` 保存脚本
+**推荐路径**（菜单13-完整工作流）：
 
-完成！你的第一个脚本已生成在 `output/scripts/` 目录中。
+1. 选择菜单 13
+2. 生成新主题（约$0.01）
+3. 选择一个主题
+4. 生成脚本（约$0.08）
+5. 合成视频（3-5分钟）
+6. 完成！
 
-## 常见问题
+**总成本**: ~$0.09
+**总时间**: ~5分钟
 
-### Q: API调用失败怎么办？
+---
 
-A: 检查以下几点：
-1. API密钥是否正确
-2. 账户是否有余额
-3. 网络是否能访问API服务器
-4. 如果使用国内网络，可能需要配置代理
+## ❓ 常见问题
 
-### Q: 如何使用不同的AI服务？
+**Q: API调用失败？**
+- 检查API密钥格式（sk-开头）
+- 确认账户有余额
 
-A: 修改 `config/settings.json` 中的 `provider` 和相关配置：
-
-**使用Anthropic Claude**:
-```json
-{
-  "ai": {
-    "provider": "anthropic",
-    "model": "claude-3-opus-20240229",
-    "api_key": "sk-ant-xxxxx",
-    "base_url": "https://api.anthropic.com/v1"
-  }
-}
+**Q: 素材推荐为空？**
+```bash
+python check_materials.py  # 检查素材库
 ```
 
-### Q: 生成的脚本质量不满意？
+**Q: FFmpeg未找到？**
+- 确保已安装并添加到PATH
+- Windows用户重启终端
 
-A: 尝试以下方法：
-1. 提供更详细的主题描述
-2. 在"额外要求"中说明具体需求
-3. 多生成几个版本，选择最好的
-4. 调整 `temperature` 参数（0.3-1.0）
-5. 人工编辑优化生成的脚本
+**Q: 视频合成慢？**
+- 正常现象，1分钟视频需5-15分钟
+- 可降低分辨率到720p/640p
 
-### Q: 如何自定义模板？
+---
 
-A: 编辑 `config/templates.json`，参考现有模板添加新的模板定义。
+## 📚 更多文档
 
-## 下一步
+- [完整README](README.md) - 详细功能说明
+- [素材准备指南](SETUP_MATERIALS.md) - 如何准备素材
+- [Bug修复总结](BUGFIX_SUMMARY.md) - 最近修复内容
 
-- 阅读 [README.md](README.md) 了解完整功能
-- 查看生成的脚本示例
-- 尝试不同的模板和主题
-- 等待后续模块开发（素材管理、视频剪辑等）
+---
 
-## 示例命令
+**准备好了吗？开始你的第一个AI视频吧！** 🎬
 
 ```bash
-# 命令行模式生成脚本
-python main.py generate "光合作用的原理" -t popular_science
-
-# 生成实验演示脚本
-python main.py generate "水的三态变化实验" -t experiment_demo
-
-# 指定时长和输出文件
-python main.py generate "DNA双螺旋结构" -d "5min" -o dna_script.json
-
-# 查看所有模板
-python main.py templates
-```
-
-## 获取帮助
-
-```bash
-python main.py --help
-python main.py generate --help
+python main.py
 ```

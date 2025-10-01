@@ -1,10 +1,29 @@
-# 科普视频自动化制作系统 V5.0 🎉
+# 科普视频自动化制作系统 V1.0-Beta 🧪
 
 [![Python Version](https://img.shields.io/badge/python-3.8+-blue.svg)](https://www.python.org/downloads/)
 [![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
-[![Version](https://img.shields.io/badge/version-5.0-brightgreen.svg)](VERSION_5.0_SUMMARY.md)
+[![Version](https://img.shields.io/badge/version-1.0--beta-orange.svg)](PROJECT_SUMMARY.md)
+[![Status](https://img.shields.io/badge/status-experimental-yellow.svg)]()
 
 AI驱动的科普视频制作工具链,从主题选择到**带语音字幕的成品视频** - **全程自动化解决方案**! 🚀
+
+## ⚠️ 重要提示
+
+**本项目处于实验阶段（Beta版本），使用前请注意：**
+
+1. **API成本**：使用OpenAI API会产生费用，建议先小规模测试
+   - 单个视频预估成本：$0.30-0.50（包含主题、脚本、图片生成）
+   - 使用Edge TTS（免费）可降低成本
+
+2. **系统依赖**：需要安装FFmpeg和ImageMagick，新手可能遇到配置问题
+
+3. **性能限制**：视频合成速度较慢（1分钟视频需5-15分钟处理）
+
+4. **素材准备**：首次使用需要准备素材库或使用AI生成（付费）
+
+5. **稳定性**：部分功能可能存在bug，不建议用于生产环境
+
+**建议用途**：学习AI应用开发、原型验证、小规模科普视频制作（<20个/月）
 
 ## 🎯 项目特色
 
@@ -15,64 +34,140 @@ AI驱动的科普视频制作工具链,从主题选择到**带语音字幕的成
 - **🔧 高度可配置**: 灵活的模板系统，丰富的配置选项
 - **📚 完善文档**: 从快速开始到深度指南，覆盖所有使用场景
 
-## ✨ V5.0 新功能 🎊
+## ✨ V1.0-Beta 功能特性
 
-🎉 **重大更新**: 实现完整的AI语音视频生产线!
+本版本实现了从主题到成品视频的完整工作流：
 
-- ✅ **TTS语音合成**: 自动将脚本转为真人语音(支持Edge TTS免费/OpenAI TTS)
-- ✅ **智能字幕生成**: 自动生成SRT/ASS字幕,与语音精确对齐
-- ✅ **全自动AI工作流**: 从主题到带语音字幕的成品视频 - 一键完成!
-- ✅ **17种中文声音**: 多种男女声可选,语速可调
-- ✅ **音频后期处理**: 自动混音BGM,完美融合
+**核心功能：**
+- ✅ **智能主题生成**: AI生成主题建议，支持收藏和评分
+- ✅ **AI脚本创作**: 根据主题自动生成视频脚本，支持多种模板
+- ✅ **素材管理系统**: 素材库管理 + AI图片生成（DALL-E 3）
+- ✅ **智能素材匹配**: 根据脚本内容自动推荐合适素材
+- ✅ **TTS语音合成**: Edge TTS（免费）或OpenAI TTS（付费）
+- ✅ **智能字幕生成**: 自动生成SRT/ASS字幕，与语音精确对齐
+- ✅ **视频自动合成**: moviepy驱动，支持文字、转场、背景音乐
+- ✅ **完整AI工作流**: 从主题到带语音字幕的成品视频，一站式完成
 
-**从V4.0升级**:
-- ✅ **视频编辑器**: 基础视频剪辑、拼接、特效
-- ✅ **智能视频合成**: 根据脚本自动生成视频
-- ✅ **转场效果库**: 6种专业转场效果
-- ✅ **素材智能匹配**: 自动为每个章节选择最佳素材
+**系统优化：**
+- ✅ **成本控制**: 操作前显示预估成本，需用户确认
+- ✅ **性能优化**: 默认720p/24fps，加快处理速度
+- ✅ **友好提示**: 详细的错误信息和操作指引
 
-[查看 V5.0 完整更新说明 →](VERSION_5.0_SUMMARY.md) | [V4.0更新 →](VERSION_4.0_SUMMARY.md)
+[查看完整项目总结 →](PROJECT_SUMMARY.md)
 
-## 🚀 5分钟快速开始
+## 🚀 快速开始（新手必读）
 
-### 1. 安装依赖
+### 步骤1：安装系统依赖
 
+**FFmpeg（必需）：**
 ```bash
-# 安装系统依赖（视频处理必需）
 # Ubuntu/Debian
 sudo apt-get install ffmpeg
 
 # macOS
 brew install ffmpeg
 
-# 安装Python依赖
+# Windows: 下载并添加到PATH
+# https://ffmpeg.org/download.html
+```
+
+**验证安装：**
+```bash
+ffmpeg -version  # 应显示版本信息
+```
+
+### 步骤2：安装Python依赖
+
+```bash
+# 克隆或下载项目后，进入项目目录
+cd make-video
+
+# 安装依赖
 pip install -r requirements.txt
 ```
 
-### 2. 配置API密钥
+### 步骤3：初始化数据
+
+```bash
+# 运行初始化脚本
+python init_data.py
+
+# 根据提示：
+# 1. 创建目录和数据文件
+# 2. 复制 config/settings.example.json 为 config/settings.json
+# 3. 配置OpenAI API密钥
+# 4. 选择是否创建示例数据
+```
+
+### 步骤4：准备素材（重要！）
+
+**选择以下任一方式：**
+
+**方式A：手动添加素材（推荐）**
+```bash
+# 1. 下载10-20张科普图片（免费素材网站）
+# 2. 放入 materials/images/ 目录
+# 3. 运行素材管理添加索引（菜单10）
+```
+
+**方式B：使用AI生成（付费）**
+- 在程序中选择菜单10 → AI生成图片
+- 每张图片约 $0.04-0.08
+
+**检查素材状态：**
+```bash
+python check_materials.py
+```
+
+**素材准备指南：** [SETUP_MATERIALS.md](SETUP_MATERIALS.md)
+
+### 步骤5：配置API密钥
 
 编辑 `config/settings.json`:
 
 ```json
 {
   "ai": {
-    "api_key": "你的OpenAI API密钥"
-  },
-  "ai_image": {
-    "api_key": "你的OpenAI API密钥"
+    "api_key": "sk-your-openai-api-key-here"
   }
 }
 ```
 
-### 3. 运行程序
+**获取API密钥：** https://platform.openai.com/api-keys
+
+### 步骤6：运行程序
 
 ```bash
 python main.py
 ```
 
-选择 **菜单13**（完整工作流），体验从主题到视频的自动化生成！
+**新手建议路径：**
+1. 选择菜单1 → 生成主题（测试API）
+2. 选择菜单7 → 生成脚本（测试脚本功能）
+3. 选择菜单12 → 预览素材推荐（检查素材匹配）
+4. 选择菜单13 → 完整工作流（生成视频）
 
-[详细快速开始指南 →](QUICKSTART_V4.md)
+**注意成本提示！** 每次AI操作前会显示预估成本。
+
+### 常见问题
+
+**Q: FFmpeg未找到？**
+- 确保已安装并添加到PATH
+- 重启终端后再试
+
+**Q: API调用失败？**
+- 检查API密钥是否正确
+- 确认账户有余额
+
+**Q: 素材推荐为空？**
+- 检查素材库是否有文件（`python check_materials.py`）
+- 为素材添加标签（菜单10）
+
+**Q: 视频合成失败？**
+- 检查FFmpeg是否正常工作
+- 降低分辨率和帧率（720p/24fps）
+
+更多帮助：查看 [完整文档](docs/)
 
 ## 📂 项目结构
 

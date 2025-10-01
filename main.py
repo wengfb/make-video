@@ -77,16 +77,23 @@ sub_gen_module = importlib.util.module_from_spec(spec10)
 spec10.loader.exec_module(sub_gen_module)
 SubtitleGenerator = sub_gen_module.SubtitleGenerator
 
+# 加载成本估算器
+spec11 = importlib.util.spec_from_file_location("cost_estimator", "scripts/utils/cost_estimator.py")
+cost_est_module = importlib.util.module_from_spec(spec11)
+spec11.loader.exec_module(cost_est_module)
+CostEstimator = cost_est_module.CostEstimator
+
 
 def print_banner():
     """打印程序横幅"""
     banner = """
 ╔═══════════════════════════════════════════════════════════╗
 ║                                                           ║
-║        科普视频自动化制作系统 v5.0                        ║
+║        科普视频自动化制作系统 v1.0-beta                   ║
 ║        AI-Powered Science Video Production System         ║
-║        ✨ 新增: TTS语音合成 + 字幕生成                    ║
-║        🎙️  从主题到带语音字幕的成品视频 - 全自动!        ║
+║        ✨ TTS语音合成 + 字幕生成 + 完整工作流             ║
+║        🎙️  从主题到带语音字幕的成品视频                  ║
+║        ⚠️  实验性质 | 请注意API成本                       ║
 ║                                                           ║
 ╚═══════════════════════════════════════════════════════════╝
     """
@@ -234,6 +241,14 @@ def generate_topics_interactive(topic_gen: TopicGenerator, topic_mgr: TopicManag
     # 生成数量
     count_input = input("\n生成数量 (默认10): ").strip()
     count = int(count_input) if count_input.isdigit() else 10
+
+    # 成本估算
+    cost = CostEstimator.estimate_topic_generation(count=count)
+    print(f"\n💰 预估成本: ${cost:.4f} USD")
+    confirm = input("是否继续? (Y/n): ").strip().lower()
+    if confirm == 'n':
+        print("已取消")
+        return
 
     # 额外要求
     custom = input("\n额外要求 (可选，直接回车跳过): ").strip() or None
@@ -499,6 +514,14 @@ def generate_script_directly(script_gen: ScriptGenerator):
 
     duration = input("\n视频时长 (如 3-5min, 直接回车使用默认): ").strip() or None
     custom_req = input("\n额外要求 (可选，直接回车跳过): ").strip() or None
+
+    # 成本估算
+    cost = CostEstimator.estimate_script_generation(sections=5)
+    print(f"\n💰 预估成本: ${cost:.4f} USD")
+    confirm = input("是否继续? (Y/n): ").strip().lower()
+    if confirm == 'n':
+        print("已取消")
+        return
 
     try:
         print("\n⏳ 正在调用AI生成脚本，请稍候...")
@@ -956,9 +979,14 @@ def full_workflow(
 
     try:
         print("\n⏳ 正在生成脚本（可能需要1-2分钟）...")
-        script = script_gen.generate_from_topic(topic)
+        script_path = script_gen.generate_from_topic(topic)
 
-        if script:
+        if script_path:
+            # 读取生成的脚本
+            import json
+            with open(script_path, 'r', encoding='utf-8') as f:
+                script = json.load(f)
+
             print(f"\n✅ 脚本生成完成!")
             print(f"   标题: {script.get('title')}")
             print(f"   章节数: {len(script.get('sections', []))}")
@@ -1310,16 +1338,21 @@ def full_ai_workflow(
     print("-" * 60)
     print("⏳ 正在生成脚本...")
 
-    script_path = script_gen.generate_script(topic=topic)
-    if not script_path:
-        print("❌ 脚本生成失败")
+    try:
+        # 从主题字典生成脚本
+        script_path = script_gen.generate_from_topic(topic)
+        if not script_path:
+            print("❌ 脚本生成失败")
+            return
+
+        import json
+        with open(script_path, 'r', encoding='utf-8') as f:
+            script = json.load(f)
+
+        print(f"✅ 脚本已生成: {script.get('title')}")
+    except Exception as e:
+        print(f"❌ 脚本生成失败: {str(e)}")
         return
-
-    import json
-    with open(script_path, 'r', encoding='utf-8') as f:
-        script = json.load(f)
-
-    print(f"✅ 脚本已生成: {script.get('title')}")
 
     # 步骤3: 生成TTS语音
     print(f"\n🎙️  步骤3: 生成TTS语音")

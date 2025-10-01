@@ -266,3 +266,35 @@ class ScriptGenerator:
                 'description': template['description']
             })
         return templates
+
+    def generate_from_topic(self, topic: Dict[str, Any]) -> str:
+        """
+        从主题字典生成脚本（用于完整工作流）
+
+        Args:
+            topic: 主题字典，包含title, description等字段
+
+        Returns:
+            脚本JSON文件路径
+        """
+        # 提取主题信息
+        topic_title = topic.get('title', '')
+        topic_desc = topic.get('description', '')
+        topic_field = topic.get('field', '')
+
+        # 构建自定义要求
+        custom_req = f"主题描述: {topic_desc}"
+        if topic_field:
+            custom_req += f"\n领域: {topic_field}"
+
+        # 生成脚本
+        script = self.generate_script(
+            topic=topic_title,
+            template_name='popular_science',
+            custom_requirements=custom_req
+        )
+
+        # 保存脚本
+        filepath = self.save_script(script)
+
+        return filepath

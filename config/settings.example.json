@@ -1,7 +1,7 @@
 {
   "project": {
     "name": "科普视频自动化制作系统",
-    "version": "5.0.0",
+    "version": "1.0.0-beta",
     "author": "AI Assistant"
   },
 
@@ -17,13 +17,18 @@
   "video": {
     "default_duration": 180,
     "resolution": {
-      "width": 1920,
-      "height": 1080
+      "width": 1280,
+      "height": 720
     },
-    "fps": 30,
+    "fps": 24,
     "output_format": "mp4",
     "codec": "libx264",
-    "bitrate": "5000k"
+    "bitrate": "3000k",
+    "default_image_duration": 5.0,
+    "transition_duration": 1.0,
+    "show_narration_text": true,
+    "text_size": 36,
+    "estimated_bitrate_mb_per_min": 3.0
   },
 
   "subtitle": {
