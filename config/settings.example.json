@@ -1,7 +1,7 @@
 {
   "project": {
     "name": "科普视频自动化制作系统",
-    "version": "1.0.0",
+    "version": "5.0.0",
     "author": "AI Assistant"
   },
 
@@ -42,7 +42,18 @@
     "output": "./output",
     "scripts": "./output/scripts",
     "subtitles": "./output/subtitles",
-    "videos": "./output/videos"
+    "videos": "./output/videos",
+    "audio": "./materials/audio"
+  },
+
+  "tts": {
+    "provider": "edge",
+    "model": "tts-1",
+    "api_key": "",
+    "voice": "zh-CN-XiaoxiaoNeural",
+    "speed": 1.0,
+    "enable_bgm_mixing": true,
+    "bgm_volume": 0.2
   },
 
   "script_generator": {
