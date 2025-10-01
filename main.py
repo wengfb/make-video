@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
-科普视频自动化制作系统 - 主程序 v4.0
-新增视频合成和完整工作流
+科普视频自动化制作系统 - 主程序 v5.0
+新增: TTS语音合成 + 字幕生成 + 完整AI视频工作流
 """
 
 import sys
@@ -59,15 +59,34 @@ video_comp_module = importlib.util.module_from_spec(spec7)
 spec7.loader.exec_module(video_comp_module)
 VideoComposer = video_comp_module.VideoComposer
 
+# 加载TTS生成器
+spec8 = importlib.util.spec_from_file_location("tts_generator", "scripts/4_tts_generator/generator.py")
+tts_gen_module = importlib.util.module_from_spec(spec8)
+spec8.loader.exec_module(tts_gen_module)
+TTSGenerator = tts_gen_module.TTSGenerator
+
+# 加载TTS管理器
+spec9 = importlib.util.spec_from_file_location("tts_manager", "scripts/4_tts_generator/manager.py")
+tts_mgr_module = importlib.util.module_from_spec(spec9)
+spec9.loader.exec_module(tts_mgr_module)
+TTSManager = tts_mgr_module.TTSManager
+
+# 加载字幕生成器
+spec10 = importlib.util.spec_from_file_location("subtitle_generator", "scripts/4_subtitle_generator/generator.py")
+sub_gen_module = importlib.util.module_from_spec(spec10)
+spec10.loader.exec_module(sub_gen_module)
+SubtitleGenerator = sub_gen_module.SubtitleGenerator
+
 
 def print_banner():
     """打印程序横幅"""
     banner = """
 ╔═══════════════════════════════════════════════════════════╗
 ║                                                           ║
-║        科普视频自动化制作系统 v4.0                        ║
+║        科普视频自动化制作系统 v5.0                        ║
 ║        AI-Powered Science Video Production System         ║
-║        ✨ 新增：视频合成 + 完整工作流                     ║
+║        ✨ 新增: TTS语音合成 + 字幕生成                    ║
+║        🎙️  从主题到带语音字幕的成品视频 - 全自动!        ║
 ║                                                           ║
 ╚═══════════════════════════════════════════════════════════╝
     """
@@ -88,12 +107,16 @@ def interactive_mode():
         material_mgr = MaterialManager()
         ai_image_gen = AIImageGenerator()
         video_composer = VideoComposer()
+        tts_generator = TTSGenerator()  # V5.0新增
+        tts_manager = TTSManager()      # V5.0新增
+        subtitle_generator = SubtitleGenerator()  # V5.0新增
     except Exception as e:
         print(f"\n❌ 初始化失败: {str(e)}")
         print("\n请确保:")
         print("1. config/settings.json 中已配置API密钥")
         print("2. 或设置环境变量 OPENAI_API_KEY")
-        print("3. 已安装moviepy等依赖: pip install -r requirements.txt")
+        print("3. 已安装所有依赖: pip install -r requirements.txt")
+        print("4. V5.0新增: 需要edge-tts库(免费TTS)")
         return
 
     # 主循环
@@ -115,13 +138,21 @@ def interactive_mode():
         print("  11. 从脚本生成视频（自动）")
         print("  12. 预览素材推荐")
         print("  13. 完整工作流（主题→脚本→视频）")
+        print("\n🎙️  语音合成 (V5.0):")
+        print("  14. 从脚本生成TTS语音")
+        print("  15. 管理TTS语音文件")
+        print("\n📝 字幕生成 (V5.0):")
+        print("  16. 从脚本生成字幕")
+        print("\n🚀 完整AI工作流 (V5.0):")
+        print("  17. 从脚本生成完整视频（语音+字幕）")
+        print("  18. 全自动工作流（主题→脚本→语音→字幕→视频）")
         print("\n🛠️  其他工具:")
         print("  8. 查看统计信息")
         print("  9. 查看脚本模板")
         print("  0. 退出")
         print("=" * 60)
 
-        choice = input("\n请选择功能 (0-13): ").strip()
+        choice = input("\n请选择功能 (0-18): ").strip()
 
         if choice == '0':
             print("\n👋 再见！")
@@ -152,6 +183,21 @@ def interactive_mode():
             preview_material_recommendations(video_composer, script_gen)
         elif choice == '13':
             full_workflow(topic_gen, topic_mgr, script_gen, video_composer)
+        elif choice == '14':
+            # V5.0: 从脚本生成TTS语音
+            generate_tts_from_script(tts_generator, script_gen)
+        elif choice == '15':
+            # V5.0: 管理TTS语音文件
+            manage_tts_audio(tts_manager)
+        elif choice == '16':
+            # V5.0: 从脚本生成字幕
+            generate_subtitle_from_script(subtitle_generator)
+        elif choice == '17':
+            # V5.0: 从脚本生成完整视频(语音+字幕)
+            compose_video_with_tts_subtitle(video_composer, tts_manager)
+        elif choice == '18':
+            # V5.0: 全自动AI工作流
+            full_ai_workflow(topic_gen, script_gen, tts_generator, subtitle_generator, video_composer)
         else:
             print("\n❌ 无效的选择，请重新输入")
 
@@ -948,6 +994,387 @@ def full_workflow(
         print(f"   主题: {topic['title']}")
         print(f"   脚本: {script.get('title')}")
         print(f"   视频: {video_path}")
+
+    except Exception as e:
+        print(f"\n❌ 视频合成失败: {str(e)}")
+        import traceback
+        traceback.print_exc()
+
+
+def generate_tts_from_script(tts_gen: TTSGenerator, script_gen: ScriptGenerator):
+    """从脚本生成TTS语音 (V5.0)"""
+    print("\n" + "-" * 60)
+    print("🎙️  从脚本生成TTS语音")
+    print("-" * 60)
+
+    # 选择脚本
+    print("\n1. 从最近生成的脚本选择")
+    print("2. 输入脚本文件路径")
+
+    choice = input("\n选择方式 (1-2): ").strip()
+
+    script_path = None
+
+    if choice == '1':
+        import glob
+        script_files = glob.glob('output/scripts/*.json')
+        if not script_files:
+            print("\n❌ 未找到脚本文件")
+            return
+
+        script_files.sort(key=os.path.getmtime, reverse=True)
+        print(f"\n找到 {len(script_files[:10])} 个最近的脚本:")
+        for i, file in enumerate(script_files[:10], 1):
+            print(f"  {i}. {os.path.basename(file)}")
+
+        file_choice = input(f"\n选择脚本 (1-{min(10, len(script_files))}): ").strip()
+        if file_choice.isdigit():
+            idx = int(file_choice) - 1
+            if 0 <= idx < len(script_files):
+                script_path = script_files[idx]
+
+    elif choice == '2':
+        path = input("\n脚本文件路径: ").strip()
+        if os.path.exists(path):
+            script_path = path
+
+    if not script_path:
+        print("\n❌ 未选择脚本")
+        return
+
+    # 生成TTS
+    try:
+        result = tts_gen.generate_speech_from_script(script_path)
+        if result.get('success'):
+            print("\n✅ TTS语音生成成功!")
+            print(f"元数据文件: {result['metadata_path']}")
+        else:
+            print(f"\n❌ TTS生成失败: {result.get('error')}")
+    except Exception as e:
+        print(f"\n❌ 生成失败: {str(e)}")
+        import traceback
+        traceback.print_exc()
+
+
+def manage_tts_audio(tts_mgr: TTSManager):
+    """管理TTS语音文件 (V5.0)"""
+    print("\n" + "-" * 60)
+    print("📚 TTS语音管理")
+    print("-" * 60)
+
+    tts_mgr.interactive_menu()
+
+
+def generate_subtitle_from_script(sub_gen: SubtitleGenerator):
+    """从脚本生成字幕 (V5.0)"""
+    print("\n" + "-" * 60)
+    print("📝 从脚本生成字幕")
+    print("-" * 60)
+
+    # 选择脚本
+    print("\n1. 从最近生成的脚本选择")
+    print("2. 输入脚本文件路径")
+
+    choice = input("\n选择方式 (1-2): ").strip()
+
+    script_path = None
+
+    if choice == '1':
+        import glob
+        script_files = glob.glob('output/scripts/*.json')
+        if not script_files:
+            print("\n❌ 未找到脚本文件")
+            return
+
+        script_files.sort(key=os.path.getmtime, reverse=True)
+        print(f"\n找到 {len(script_files[:10])} 个最近的脚本:")
+        for i, file in enumerate(script_files[:10], 1):
+            print(f"  {i}. {os.path.basename(file)}")
+
+        file_choice = input(f"\n选择脚本 (1-{min(10, len(script_files))}): ").strip()
+        if file_choice.isdigit():
+            idx = int(file_choice) - 1
+            if 0 <= idx < len(script_files):
+                script_path = script_files[idx]
+
+    elif choice == '2':
+        path = input("\n脚本文件路径: ").strip()
+        if os.path.exists(path):
+            script_path = path
+
+    if not script_path:
+        print("\n❌ 未选择脚本")
+        return
+
+    # 可选: 选择TTS音频元数据(用于精确对齐)
+    print("\n是否使用TTS音频进行精确时间对齐?")
+    print("1. 是 (推荐,需要先生成TTS)")
+    print("2. 否 (使用估算时长)")
+
+    audio_choice = input("\n选择 (1-2): ").strip()
+
+    audio_metadata_path = None
+
+    if audio_choice == '1':
+        # 查找对应的TTS元数据
+        import glob
+        tts_files = glob.glob('materials/audio/tts/*_metadata.json')
+        if tts_files:
+            print(f"\n找到 {len(tts_files)} 个TTS音频:")
+            for i, file in enumerate(tts_files, 1):
+                print(f"  {i}. {os.path.basename(file)}")
+
+            tts_choice = input(f"\n选择TTS音频 (1-{len(tts_files)}, 0=跳过): ").strip()
+            if tts_choice.isdigit() and int(tts_choice) > 0:
+                idx = int(tts_choice) - 1
+                if 0 <= idx < len(tts_files):
+                    audio_metadata_path = tts_files[idx]
+
+    # 选择字幕格式
+    print("\n选择字幕格式:")
+    print("1. SRT (推荐,通用格式)")
+    print("2. ASS (高级字幕)")
+
+    format_choice = input("\n选择格式 (1-2): ").strip()
+    format = "srt" if format_choice == "1" else "ass"
+
+    # 生成字幕
+    try:
+        result = sub_gen.generate_from_script(
+            script_path,
+            audio_metadata_path,
+            format=format
+        )
+
+        if result.get('success'):
+            print("\n✅ 字幕生成成功!")
+            print(f"字幕文件: {result['subtitle_file']}")
+        else:
+            print(f"\n❌ 字幕生成失败: {result.get('error')}")
+    except Exception as e:
+        print(f"\n❌ 生成失败: {str(e)}")
+        import traceback
+        traceback.print_exc()
+
+
+def compose_video_with_tts_subtitle(
+    composer: VideoComposer,
+    tts_mgr: TTSManager
+):
+    """从脚本生成完整视频(语音+字幕) (V5.0)"""
+    print("\n" + "=" * 60)
+    print("🚀 生成完整视频 (语音+字幕)")
+    print("=" * 60)
+
+    # 选择脚本
+    print("\n📄 步骤1: 选择脚本")
+    import glob
+    script_files = glob.glob('output/scripts/*.json')
+    if not script_files:
+        print("\n❌ 未找到脚本文件")
+        return
+
+    script_files.sort(key=os.path.getmtime, reverse=True)
+    print(f"\n找到 {len(script_files[:10])} 个最近的脚本:")
+    for i, file in enumerate(script_files[:10], 1):
+        print(f"  {i}. {os.path.basename(file)}")
+
+    file_choice = input(f"\n选择脚本 (1-{min(10, len(script_files))}): ").strip()
+    if not file_choice.isdigit():
+        return
+
+    idx = int(file_choice) - 1
+    if not (0 <= idx < len(script_files)):
+        return
+
+    script_path = script_files[idx]
+
+    import json
+    with open(script_path, 'r', encoding='utf-8') as f:
+        script = json.load(f)
+
+    # 选择TTS音频
+    print("\n🎙️  步骤2: 选择TTS音频")
+    audio_list = tts_mgr.list_all_audio()
+
+    if not audio_list:
+        print("❌ 未找到TTS音频,请先生成TTS (菜单14)")
+        return
+
+    tts_mgr.print_audio_list(audio_list)
+
+    audio_choice = input(f"\n选择TTS音频 (1-{len(audio_list)}): ").strip()
+    if not audio_choice.isdigit():
+        return
+
+    audio_idx = int(audio_choice) - 1
+    if not (0 <= audio_idx < len(audio_list)):
+        return
+
+    tts_metadata_path = audio_list[audio_idx]['metadata_file']
+
+    # 选择字幕
+    print("\n📝 步骤3: 选择字幕文件")
+    print("1. 使用现有字幕")
+    print("2. 跳过字幕")
+
+    subtitle_choice = input("\n选择 (1-2): ").strip()
+
+    subtitle_file = None
+
+    if subtitle_choice == '1':
+        subtitle_files = glob.glob('output/subtitles/*.srt') + glob.glob('output/subtitles/*.ass')
+        if subtitle_files:
+            print(f"\n找到 {len(subtitle_files)} 个字幕文件:")
+            for i, file in enumerate(subtitle_files, 1):
+                print(f"  {i}. {os.path.basename(file)}")
+
+            sub_choice = input(f"\n选择字幕 (1-{len(subtitle_files)}, 0=跳过): ").strip()
+            if sub_choice.isdigit() and int(sub_choice) > 0:
+                sub_idx = int(sub_choice) - 1
+                if 0 <= sub_idx < len(subtitle_files):
+                    subtitle_file = subtitle_files[sub_idx]
+
+    # 合成视频
+    print("\n🎬 步骤4: 合成视频")
+    print("-" * 60)
+
+    info = composer.get_composition_info(script)
+    print(f"   预估时长: {info['estimated_duration']:.1f}秒")
+
+    confirm = input("\n开始合成视频? (Y/n): ").strip().lower()
+    if confirm == 'n':
+        return
+
+    try:
+        print("\n⏳ 正在合成视频...")
+        video_path = composer.compose_from_script(
+            script,
+            auto_select_materials=True,
+            tts_metadata_path=tts_metadata_path,
+            subtitle_file=subtitle_file,
+            use_tts_audio=True
+        )
+
+        print("\n" + "=" * 60)
+        print("🎉 完整视频生成成功!")
+        print("=" * 60)
+        print(f"   视频: {video_path}")
+        print(f"   包含: TTS语音 + {'字幕' if subtitle_file else '无字幕'}")
+
+    except Exception as e:
+        print(f"\n❌ 视频合成失败: {str(e)}")
+        import traceback
+        traceback.print_exc()
+
+
+def full_ai_workflow(
+    topic_gen: TopicGenerator,
+    script_gen: ScriptGenerator,
+    tts_gen: TTSGenerator,
+    sub_gen: SubtitleGenerator,
+    composer: VideoComposer
+):
+    """全自动AI工作流: 主题→脚本→语音→字幕→视频 (V5.0)"""
+    print("\n" + "=" * 60)
+    print("🚀 全自动AI工作流")
+    print("从主题到带语音字幕的成品视频 - 一键完成!")
+    print("=" * 60)
+
+    # 步骤1: 生成主题
+    print("\n📝 步骤1: 生成主题")
+    print("-" * 60)
+    print("⏳ 正在生成主题建议...")
+
+    topics = topic_gen.generate_topics(count=5)
+    if not topics:
+        print("❌ 主题生成失败")
+        return
+
+    print(f"\n生成了 {len(topics)} 个主题:")
+    for i, t in enumerate(topics, 1):
+        print(f"  {i}. {t['title']}")
+
+    sel = input(f"\n选择主题 (1-{len(topics)}): ").strip()
+    if not sel.isdigit():
+        return
+
+    idx = int(sel) - 1
+    if not (0 <= idx < len(topics)):
+        return
+
+    topic = topics[idx]
+
+    # 步骤2: 生成脚本
+    print(f"\n📄 步骤2: 生成脚本")
+    print("-" * 60)
+    print("⏳ 正在生成脚本...")
+
+    script_path = script_gen.generate_script(topic=topic)
+    if not script_path:
+        print("❌ 脚本生成失败")
+        return
+
+    import json
+    with open(script_path, 'r', encoding='utf-8') as f:
+        script = json.load(f)
+
+    print(f"✅ 脚本已生成: {script.get('title')}")
+
+    # 步骤3: 生成TTS语音
+    print(f"\n🎙️  步骤3: 生成TTS语音")
+    print("-" * 60)
+    print("⏳ 正在生成语音...")
+
+    tts_result = tts_gen.generate_speech_from_script(script_path)
+    if not tts_result.get('success'):
+        print("❌ TTS生成失败")
+        return
+
+    tts_metadata_path = tts_result['metadata_path']
+    print(f"✅ 语音已生成 ({tts_result['total_duration']:.1f}秒)")
+
+    # 步骤4: 生成字幕
+    print(f"\n📝 步骤4: 生成字幕")
+    print("-" * 60)
+    print("⏳ 正在生成字幕...")
+
+    sub_result = sub_gen.generate_from_script(
+        script_path,
+        tts_metadata_path,
+        format="srt"
+    )
+
+    if not sub_result.get('success'):
+        print("⚠️  字幕生成失败,将继续合成视频(无字幕)")
+        subtitle_file = None
+    else:
+        subtitle_file = sub_result['subtitle_file']
+        print(f"✅ 字幕已生成")
+
+    # 步骤5: 合成视频
+    print(f"\n🎬 步骤5: 合成视频")
+    print("-" * 60)
+    print("⏳ 正在合成视频...")
+
+    try:
+        video_path = composer.compose_from_script(
+            script,
+            auto_select_materials=True,
+            tts_metadata_path=tts_metadata_path,
+            subtitle_file=subtitle_file,
+            use_tts_audio=True
+        )
+
+        print("\n" + "=" * 60)
+        print("🎉 全自动AI工作流完成!")
+        print("=" * 60)
+        print(f"   主题: {topic['title']}")
+        print(f"   脚本: {script.get('title')}")
+        print(f"   语音: {tts_result['audio_files'][0]['file_path'] if tts_result['audio_files'] else 'N/A'}")
+        print(f"   字幕: {subtitle_file if subtitle_file else '无'}")
+        print(f"   视频: {video_path}")
+        print("\n🎊 您的AI视频已准备就绪!")
 
     except Exception as e:
         print(f"\n❌ 视频合成失败: {str(e)}")

@@ -43,15 +43,21 @@ class VideoComposer:
         self,
         script: Dict[str, Any],
         auto_select_materials: bool = True,
-        output_filename: Optional[str] = None
+        output_filename: Optional[str] = None,
+        tts_metadata_path: Optional[str] = None,
+        subtitle_file: Optional[str] = None,
+        use_tts_audio: bool = True
     ) -> str:
         """
-        根据脚本自动合成视频
+        根据脚本自动合成视频 (V5.0 - 支持TTS和字幕)
 
         Args:
             script: 脚本字典（包含sections）
             auto_select_materials: 是否自动选择素材
             output_filename: 输出文件名
+            tts_metadata_path: TTS音频元数据JSON文件路径 (V5.0新增)
+            subtitle_file: 字幕文件路径(.srt/.ass) (V5.0新增)
+            use_tts_audio: 是否使用TTS音频替代BGM (V5.0新增)
 
         Returns:
             视频文件路径
@@ -139,21 +145,101 @@ class VideoComposer:
         print(f"\n🎞️  合并 {len(all_clips)} 个片段...")
         final_video = concatenate_videoclips(all_clips, method="compose")
 
-        # 添加背景音乐（如果配置了）
-        bgm_path = self.video_config.get('default_bgm')
-        if bgm_path and os.path.exists(bgm_path):
-            print("🎵 添加背景音乐...")
+        # V5.0: 添加TTS语音或背景音乐
+        if use_tts_audio and tts_metadata_path and os.path.exists(tts_metadata_path):
+            print("🎙️  添加TTS语音...")
             try:
-                audio = AudioFileClip(bgm_path)
-                # 循环背景音乐以匹配视频长度
-                if audio.duration < final_video.duration:
-                    audio = audio.loop(duration=final_video.duration)
-                else:
-                    audio = audio.subclip(0, final_video.duration)
+                # 读取TTS元数据
+                with open(tts_metadata_path, 'r', encoding='utf-8') as f:
+                    tts_metadata = json.load(f)
 
-                final_video = final_video.set_audio(audio)
+                audio_files = [item['file_path'] for item in tts_metadata.get('audio_files', [])]
+
+                if audio_files:
+                    # 合并所有TTS音频
+                    audio_clips = [AudioFileClip(f) for f in audio_files if os.path.exists(f)]
+                    if audio_clips:
+                        from moviepy.editor import concatenate_audioclips
+                        tts_audio = concatenate_audioclips(audio_clips)
+
+                        # 添加BGM作为背景(降低音量)
+                        bgm_path = self.video_config.get('default_bgm')
+                        if bgm_path and os.path.exists(bgm_path):
+                            bgm = AudioFileClip(bgm_path)
+                            if bgm.duration < tts_audio.duration:
+                                bgm = bgm.loop(duration=tts_audio.duration)
+                            else:
+                                bgm = bgm.subclip(0, tts_audio.duration)
+                            # 降低BGM音量
+                            bgm = bgm.volumex(0.2)
+                            # 混合TTS和BGM
+                            from moviepy.audio.AudioClip import CompositeAudioClip
+                            final_audio = CompositeAudioClip([tts_audio, bgm])
+                        else:
+                            final_audio = tts_audio
+
+                        final_video = final_video.set_audio(final_audio)
+                        print(f"   ✅ TTS音频已添加 (时长: {tts_audio.duration:.1f}秒)")
+
+                        # 调整视频长度以匹配音频
+                        if final_video.duration != tts_audio.duration:
+                            print(f"   ⚠️  调整视频长度: {final_video.duration:.1f}秒 -> {tts_audio.duration:.1f}秒")
+                            final_video = final_video.set_duration(tts_audio.duration)
             except Exception as e:
-                print(f"   ⚠️  添加音乐失败: {str(e)}")
+                print(f"   ⚠️  添加TTS音频失败: {str(e)}")
+                import traceback
+                traceback.print_exc()
+        else:
+            # 添加背景音乐（如果配置了）
+            bgm_path = self.video_config.get('default_bgm')
+            if bgm_path and os.path.exists(bgm_path):
+                print("🎵 添加背景音乐...")
+                try:
+                    audio = AudioFileClip(bgm_path)
+                    # 循环背景音乐以匹配视频长度
+                    if audio.duration < final_video.duration:
+                        audio = audio.loop(duration=final_video.duration)
+                    else:
+                        audio = audio.subclip(0, final_video.duration)
+
+                    final_video = final_video.set_audio(audio)
+                except Exception as e:
+                    print(f"   ⚠️  添加音乐失败: {str(e)}")
+
+        # V5.0: 添加字幕
+        if subtitle_file and os.path.exists(subtitle_file):
+            print(f"📝 添加字幕: {subtitle_file}")
+            try:
+                from moviepy.video.tools.subtitles import SubtitlesClip
+
+                # 创建字幕函数
+                def generator(txt):
+                    from moviepy.editor import TextClip
+                    return TextClip(
+                        txt,
+                        fontsize=self.video_config.get('text_size', 48),
+                        color='white',
+                        bg_color='black',
+                        method='caption',
+                        size=(final_video.w - 200, None)
+                    )
+
+                # 加载字幕
+                subtitles = SubtitlesClip(subtitle_file, generator)
+
+                # 合成视频和字幕
+                from moviepy.editor import CompositeVideoClip
+                final_video = CompositeVideoClip([
+                    final_video,
+                    subtitles.set_position(('center', 'bottom'))
+                ])
+
+                print("   ✅ 字幕已添加")
+            except Exception as e:
+                print(f"   ⚠️  添加字幕失败: {str(e)}")
+                print(f"   提示: 确保字幕文件格式正确,且moviepy支持字幕功能")
+                import traceback
+                traceback.print_exc()
 
         # 输出文件
         if output_filename is None:

@@ -1,10 +1,10 @@
-# 科普视频自动化制作系统 V4.0
+# 科普视频自动化制作系统 V5.0 🎉
 
 [![Python Version](https://img.shields.io/badge/python-3.8+-blue.svg)](https://www.python.org/downloads/)
 [![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
-[![Version](https://img.shields.io/badge/version-4.0-orange.svg)](VERSION_4.0_SUMMARY.md)
+[![Version](https://img.shields.io/badge/version-5.0-brightgreen.svg)](VERSION_5.0_SUMMARY.md)
 
-AI驱动的科普视频制作工具链，从主题选择到视频输出的**端到端自动化解决方案**。
+AI驱动的科普视频制作工具链,从主题选择到**带语音字幕的成品视频** - **全程自动化解决方案**! 🚀
 
 ## 🎯 项目特色
 
@@ -15,17 +15,23 @@ AI驱动的科普视频制作工具链，从主题选择到视频输出的**端�
 - **🔧 高度可配置**: 灵活的模板系统，丰富的配置选项
 - **📚 完善文档**: 从快速开始到深度指南，覆盖所有使用场景
 
-## ✨ V4.0 新功能
+## ✨ V5.0 新功能 🎊
 
-🎉 **重大更新**: 实现完整的视频自动化生成！
+🎉 **重大更新**: 实现完整的AI语音视频生产线!
 
+- ✅ **TTS语音合成**: 自动将脚本转为真人语音(支持Edge TTS免费/OpenAI TTS)
+- ✅ **智能字幕生成**: 自动生成SRT/ASS字幕,与语音精确对齐
+- ✅ **全自动AI工作流**: 从主题到带语音字幕的成品视频 - 一键完成!
+- ✅ **17种中文声音**: 多种男女声可选,语速可调
+- ✅ **音频后期处理**: 自动混音BGM,完美融合
+
+**从V4.0升级**:
 - ✅ **视频编辑器**: 基础视频剪辑、拼接、特效
 - ✅ **智能视频合成**: 根据脚本自动生成视频
 - ✅ **转场效果库**: 6种专业转场效果
-- ✅ **完整工作流**: 从主题到成品视频一键完成
 - ✅ **素材智能匹配**: 自动为每个章节选择最佳素材
 
-[查看 V4.0 完整更新说明 →](VERSION_4.0_SUMMARY.md)
+[查看 V5.0 完整更新说明 →](VERSION_5.0_SUMMARY.md) | [V4.0更新 →](VERSION_4.0_SUMMARY.md)
 
 ## 🚀 5分钟快速开始
 
