@@ -60,14 +60,18 @@ class UnsplashFetcher:
             return {"paths": {"materials": "./materials"}, "unsplash": {}}
 
     def _load_cache(self) -> dict:
-        """加载缓存"""
+        """加载缓存（V5.4：添加下载记录）"""
         if self.cache_file.exists():
             try:
                 with open(self.cache_file, 'r', encoding='utf-8') as f:
-                    return json.load(f)
+                    cache = json.load(f)
+                    # 确保包含下载记录字段
+                    if "downloaded_materials" not in cache:
+                        cache["downloaded_materials"] = {}
+                    return cache
             except:
-                return {}
-        return {}
+                return {"downloaded_materials": {}}
+        return {"downloaded_materials": {}}
 
     def _save_cache(self):
         """保存缓存"""
@@ -76,6 +80,38 @@ class UnsplashFetcher:
                 json.dump(self.cache, f, ensure_ascii=False, indent=2)
         except Exception as e:
             print(f"⚠️  保存缓存失败: {str(e)}")
+
+    def _record_download(self, material_id: str, local_path: str):
+        """
+        记录已下载的素材（V5.4新增）
+
+        Args:
+            material_id: 素材ID（格式：unsplash_xxx）
+            local_path: 本地文件路径
+        """
+        self.cache["downloaded_materials"][material_id] = {
+            "local_path": local_path,
+            "type": "photo",
+            "downloaded_at": time.time()
+        }
+        self._save_cache()
+
+    def _check_downloaded(self, material_id: str) -> Optional[str]:
+        """
+        检查素材是否已下载（V5.4新增）
+
+        Args:
+            material_id: 素材ID
+
+        Returns:
+            本地文件路径（如果已下载且文件存在），否则返回None
+        """
+        downloaded = self.cache.get("downloaded_materials", {}).get(material_id)
+        if downloaded:
+            local_path = downloaded.get("local_path")
+            if local_path and os.path.exists(local_path):
+                return local_path
+        return None
 
     def search_photos(
         self,
@@ -183,7 +219,7 @@ class UnsplashFetcher:
         quality: str = "regular"
     ) -> Optional[str]:
         """
-        下载图片到本地
+        下载图片到本地（V5.4：添加下载记录）
 
         Args:
             photo_info: 图片信息字典
@@ -196,15 +232,24 @@ class UnsplashFetcher:
         try:
             photo_id = photo_info["id"]
             url = photo_info["urls"].get(quality, photo_info["urls"]["regular"])
+            material_id = f"unsplash_{photo_id}"
+
+            # V5.4: 先检查下载记录缓存
+            cached_path = self._check_downloaded(material_id)
+            if cached_path:
+                print(f"   ⏭️  已存在（缓存）: {os.path.basename(cached_path)}")
+                return cached_path
 
             # 文件名
             safe_keyword = "".join(c for c in keyword if c.isalnum() or c in (' ', '-', '_')).strip()
             filename = f"{safe_keyword}_{photo_id}.jpg"
             filepath = self.image_dir / filename
 
-            # 检查是否已存在
+            # 检查文件是否已存在
             if filepath.exists():
                 print(f"   ⏭️  已存在: {filename}")
+                # V5.4: 记录到缓存（补充遗漏的记录）
+                self._record_download(material_id, str(filepath))
                 return str(filepath)
 
             print(f"   ⬇️  下载图片: {filename} ({quality})")
@@ -225,6 +270,9 @@ class UnsplashFetcher:
 
                 file_size_kb = filepath.stat().st_size / 1024
                 print(f"   ✅ 下载完成: {file_size_kb:.0f} KB")
+
+                # V5.4: 记录下载
+                self._record_download(material_id, str(filepath))
 
                 return str(filepath)
             else:

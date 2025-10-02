@@ -599,6 +599,29 @@ class MaterialRecommender:
         print(f"      ⚠️  无匹配，使用默认: 'science education'")
         return 'science education'
 
+    def _check_material_exists(self, material_id: str) -> Optional[Dict[str, Any]]:
+        """
+        检查素材是否已存在数据库（V5.4新增）
+
+        Args:
+            material_id: 素材ID（如 pexels_video_29541711）
+
+        Returns:
+            素材信息（如果存在），否则返回None
+        """
+        # 精确ID匹配（通过name字段）
+        materials = self.material_manager.search_materials(material_id, search_in=['name'])
+
+        for material in materials:
+            # 精确匹配name
+            if material.get('name') == material_id:
+                # 验证文件是否存在
+                file_path = material.get('file_path')
+                if file_path and os.path.exists(file_path):
+                    return material
+
+        return None
+
     def _ai_extract_keyword(self, visual_notes: str, narration: str) -> Optional[str]:
         """
         使用AI智能提取英文关键词
@@ -650,7 +673,7 @@ class MaterialRecommender:
 
     def _fetch_from_pexels_videos(self, keyword: str, count: int = 3) -> List[Dict[str, Any]]:
         """
-        从Pexels获取视频素材
+        从Pexels获取视频素材（V5.4：优化重复下载检查）
 
         Args:
             keyword: 英文关键词
@@ -671,13 +694,23 @@ class MaterialRecommender:
             # 自动下载
             materials = []
             for video in videos[:count]:
+                # V5.4: 统一素材ID格式
+                material_id = f"pexels_video_{video['id']}"
+
+                # V5.4: 早期退出 - 先检查数据库是否已存在（精确ID匹配）
+                existing = self._check_material_exists(material_id)
+                if existing:
+                    print(f"       ⏭️  已存在数据库: {material_id}")
+                    materials.append(existing)
+                    continue
+
                 if self.smart_fetch_config.get('auto_download', True):
                     filepath = self.pexels_fetcher.download_video(video, keyword)
                     if filepath:
-                        # 转换为统一格式
+                        # 转换为统一格式（V5.4：统一命名）
                         material_data = {
-                            'id': f"pexels_video_{video['id']}",
-                            'name': f"{keyword}_{video['id']}",
+                            'id': material_id,
+                            'name': material_id,  # V5.4: 统一使用material_id作为名称
                             'type': 'video',
                             'file_path': filepath,
                             'tags': [keyword, 'pexels', 'HD'],
@@ -689,21 +722,22 @@ class MaterialRecommender:
                         }
                         materials.append(material_data)
 
-                        # ✨ 将素材注册到素材库（持久化）
+                        # V5.4: 注册到素材库（优化检查逻辑）
                         try:
-                            # 检查是否已存在
-                            existing = self.material_manager.search_materials(f"pexels_video_{video['id']}")
-                            if not existing:
+                            # 再次检查（防止并发问题）
+                            if not self._check_material_exists(material_id):
                                 self.material_manager.add_material(
-                                    name=material_data['name'],
+                                    name=material_id,  # V5.4: 使用统一ID
                                     file_path=filepath,
                                     material_type='video',
                                     tags=material_data['tags'],
                                     description=material_data['description']
                                 )
-                                print(f"       ✓ 已注册到素材库: {material_data['name']}")
+                                print(f"       ✓ 已注册到素材库: {material_id}")
+                            else:
+                                print(f"       ⏭️  已在数据库，跳过注册: {material_id}")
                         except Exception as reg_error:
-                            print(f"       ⚠️  注册到素材库失败: {str(reg_error)}")
+                            print(f"       ⚠️  注册失败: {str(reg_error)}")
 
             return materials
 
@@ -712,7 +746,7 @@ class MaterialRecommender:
             return []
 
     def _fetch_from_pexels_photos(self, keyword: str, count: int = 3) -> List[Dict[str, Any]]:
-        """从Pexels获取图片素材"""
+        """从Pexels获取图片素材（V5.4：优化重复下载检查）"""
         if not self.pexels_fetcher:
             return []
 
@@ -723,12 +757,22 @@ class MaterialRecommender:
 
             materials = []
             for photo in photos[:count]:
+                # V5.4: 统一素材ID格式
+                material_id = f"pexels_photo_{photo['id']}"
+
+                # V5.4: 早期退出 - 先检查数据库
+                existing = self._check_material_exists(material_id)
+                if existing:
+                    print(f"       ⏭️  已存在数据库: {material_id}")
+                    materials.append(existing)
+                    continue
+
                 if self.smart_fetch_config.get('auto_download', True):
                     filepath = self.pexels_fetcher.download_photo(photo, keyword)
                     if filepath:
                         material_data = {
-                            'id': f"pexels_photo_{photo['id']}",
-                            'name': f"{keyword}_{photo['id']}",
+                            'id': material_id,
+                            'name': material_id,  # V5.4: 统一使用material_id
                             'type': 'image',
                             'file_path': filepath,
                             'tags': [keyword, 'pexels', 'HD'],
@@ -740,21 +784,21 @@ class MaterialRecommender:
                         }
                         materials.append(material_data)
 
-                        # ✨ 将素材注册到素材库（持久化）
+                        # V5.4: 注册到素材库（优化检查）
                         try:
-                            # 检查是否已存在
-                            existing = self.material_manager.search_materials(f"pexels_photo_{photo['id']}")
-                            if not existing:
+                            if not self._check_material_exists(material_id):
                                 self.material_manager.add_material(
-                                    name=material_data['name'],
+                                    name=material_id,
                                     file_path=filepath,
                                     material_type='image',
                                     tags=material_data['tags'],
                                     description=material_data['description']
                                 )
-                                print(f"       ✓ 已注册到素材库: {material_data['name']}")
+                                print(f"       ✓ 已注册到素材库: {material_id}")
+                            else:
+                                print(f"       ⏭️  已在数据库，跳过注册: {material_id}")
                         except Exception as reg_error:
-                            print(f"       ⚠️  注册到素材库失败: {str(reg_error)}")
+                            print(f"       ⚠️  注册失败: {str(reg_error)}")
 
             return materials
 
@@ -763,7 +807,7 @@ class MaterialRecommender:
             return []
 
     def _fetch_from_unsplash(self, keyword: str, count: int = 3) -> List[Dict[str, Any]]:
-        """从Unsplash获取高质量图片"""
+        """从Unsplash获取高质量图片（V5.4：优化重复下载检查）"""
         if not self.unsplash_fetcher:
             return []
 
@@ -774,12 +818,22 @@ class MaterialRecommender:
 
             materials = []
             for photo in photos[:count]:
+                # V5.4: 统一素材ID格式
+                material_id = f"unsplash_{photo['id']}"
+
+                # V5.4: 早期退出 - 先检查数据库
+                existing = self._check_material_exists(material_id)
+                if existing:
+                    print(f"       ⏭️  已存在数据库: {material_id}")
+                    materials.append(existing)
+                    continue
+
                 if self.smart_fetch_config.get('auto_download', True):
                     filepath = self.unsplash_fetcher.download_photo(photo, keyword, quality='regular')
                     if filepath:
                         material_data = {
-                            'id': f"unsplash_{photo['id']}",
-                            'name': f"{keyword}_{photo['id']}",
+                            'id': material_id,
+                            'name': material_id,  # V5.4: 统一使用material_id
                             'type': 'image',
                             'file_path': filepath,
                             'tags': [keyword, 'unsplash', 'HD'],
@@ -791,21 +845,21 @@ class MaterialRecommender:
                         }
                         materials.append(material_data)
 
-                        # ✨ 将素材注册到素材库（持久化）
+                        # V5.4: 注册到素材库（优化检查）
                         try:
-                            # 检查是否已存在
-                            existing = self.material_manager.search_materials(f"unsplash_{photo['id']}")
-                            if not existing:
+                            if not self._check_material_exists(material_id):
                                 self.material_manager.add_material(
-                                    name=material_data['name'],
+                                    name=material_id,
                                     file_path=filepath,
                                     material_type='image',
                                     tags=material_data['tags'],
                                     description=material_data['description']
                                 )
-                                print(f"       ✓ 已注册到素材库: {material_data['name']}")
+                                print(f"       ✓ 已注册到素材库: {material_id}")
+                            else:
+                                print(f"       ⏭️  已在数据库，跳过注册: {material_id}")
                         except Exception as reg_error:
-                            print(f"       ⚠️  注册到素材库失败: {str(reg_error)}")
+                            print(f"       ⚠️  注册失败: {str(reg_error)}")
 
             return materials
 

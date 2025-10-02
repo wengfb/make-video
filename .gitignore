@@ -53,6 +53,7 @@ materials/images/*
 materials/videos/*
 materials/audio/*
 materials/fonts/*
+materials/*.json
 
 # 但保留目录
 !materials/images/.gitkeep
@@ -72,3 +73,9 @@ Thumbs.db
 
 # 归档目录
 .archive/
+
+# 数据目录
+data/
+
+# 备份目录
+backup/
