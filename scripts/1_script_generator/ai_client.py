@@ -229,13 +229,29 @@ class AIClient:
                             print(f"\n⚠️  GLM API限流(429)，{delay}秒后重试 ({attempt + 1}/{max_retries})...")
                         else:
                             delay = retry_delays[attempt]
-                            print(f"\n⚠️  GLM API错误 ({e.response.status_code})，{delay}秒后重试 ({attempt + 1}/{max_retries})...")
+                            # 尝试获取错误详情
+                            try:
+                                error_detail = e.response.json()
+                                print(f"\n⚠️  GLM API错误 ({e.response.status_code})，详情: {error_detail.get('error', {}).get('message', 'N/A')}")
+                            except:
+                                print(f"\n⚠️  GLM API错误 ({e.response.status_code})，{delay}秒后重试 ({attempt + 1}/{max_retries})...")
                         time.sleep(delay)
                     else:
-                        raise Exception(f"GLM API调用失败（已重试{max_retries}次）: {str(e)}")
+                        # 最后一次失败，提供详细错误信息
+                        try:
+                            error_detail = e.response.json()
+                            error_msg = error_detail.get('error', {}).get('message', str(e))
+                        except:
+                            error_msg = str(e)
+                        raise Exception(f"GLM API调用失败（已重试{max_retries}次，状态码{e.response.status_code}）: {error_msg}")
                 else:
                     # 其他HTTP错误（如401认证失败），不重试
-                    raise Exception(f"GLM API调用失败: {str(e)}")
+                    try:
+                        error_detail = e.response.json()
+                        error_msg = error_detail.get('error', {}).get('message', str(e))
+                    except:
+                        error_msg = str(e)
+                    raise Exception(f"GLM API调用失败（状态码{e.response.status_code}）: {error_msg}")
 
             except requests.exceptions.RequestException as e:
                 # 其他请求错误
