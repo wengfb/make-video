@@ -83,6 +83,12 @@ cost_est_module = importlib.util.module_from_spec(spec11)
 spec11.loader.exec_module(cost_est_module)
 CostEstimator = cost_est_module.CostEstimator
 
+# 加载智能视频合成器
+spec12 = importlib.util.spec_from_file_location("smart_composer", "scripts/3_video_editor/smart_composer.py")
+smart_comp_module = importlib.util.module_from_spec(spec12)
+spec12.loader.exec_module(smart_comp_module)
+SmartVideoComposer = smart_comp_module.SmartVideoComposer
+
 
 def print_banner():
     """打印程序横幅"""
@@ -144,7 +150,6 @@ def interactive_mode():
         video_composer = VideoComposer()
 
         # 智能视频合成器（AI动效）
-        from scripts.3_video_editor.smart_composer import SmartVideoComposer
         smart_composer = SmartVideoComposer()
 
         tts_generator = TTSGenerator()  # V5.0新增

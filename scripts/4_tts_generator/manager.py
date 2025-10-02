@@ -118,7 +118,7 @@ class TTSManager:
             是否成功
         """
         try:
-            from moviepy.editor import AudioFileClip, concatenate_audioclips
+            from moviepy import AudioFileClip, concatenate_audioclips
 
             print(f"\n🔀 合并 {len(audio_files)} 个音频文件...")
 

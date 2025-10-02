@@ -287,7 +287,7 @@ class TTSGenerator:
             时长(秒)
         """
         try:
-            from moviepy.editor import AudioFileClip
+            from moviepy import AudioFileClip
 
             audio = AudioFileClip(audio_path)
             duration = audio.duration

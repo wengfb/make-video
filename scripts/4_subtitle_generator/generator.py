@@ -168,7 +168,7 @@ class SubtitleGenerator:
                 duration = audio_durations[i]
             else:
                 # 使用脚本中的时长或估算
-                duration = section.get("duration", 0)
+                duration = self._parse_duration(section.get("duration", 0), default=0)
                 if duration == 0:
                     # 粗略估算: 中文约2.5字/秒
                     duration = max(2.0, len(narration) / 2.5)
@@ -373,6 +373,43 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
             return 50
         else:  # middle
             return 0
+
+    def _parse_duration(self, duration_value, default: float = 5.0) -> float:
+        """
+        解析duration值，支持字符串和数字格式
+
+        Args:
+            duration_value: duration值（可能是"15秒"、"15s"、15、15.0等）
+            default: 解析失败时的默认值
+
+        Returns:
+            解析后的浮点数秒数
+
+        Examples:
+            "15秒" -> 15.0
+            "110秒" -> 110.0
+            "15s" -> 15.0
+            15 -> 15.0
+            15.0 -> 15.0
+        """
+        import re
+
+        # 如果已经是数字，直接返回
+        if isinstance(duration_value, (int, float)):
+            return float(duration_value)
+
+        # 如果是字符串，提取数字
+        if isinstance(duration_value, str):
+            # 匹配数字（整数或小数）
+            match = re.search(r'(\d+\.?\d*)', duration_value)
+            if match:
+                try:
+                    return float(match.group(1))
+                except ValueError:
+                    pass
+
+        # 解析失败，返回默认值
+        return default
 
 
 # 命令行测试
