@@ -1,6 +1,7 @@
 """
 智能素材推荐系统
 根据脚本内容智能推荐合适的素材
+V5.1 新增: 四级智能获取策略 (本地 → Pexels → Unsplash → DALL-E)
 """
 
 import json
@@ -12,9 +13,24 @@ import os
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '1_script_generator'))
 from ai_client import AIClient
 
+# 导入外部素材获取器
+try:
+    from pexels_fetcher import PexelsFetcher
+    PEXELS_AVAILABLE = True
+except ImportError:
+    PEXELS_AVAILABLE = False
+    print("⚠️  Pexels模块未加载")
+
+try:
+    from unsplash_fetcher import UnsplashFetcher
+    UNSPLASH_AVAILABLE = True
+except ImportError:
+    UNSPLASH_AVAILABLE = False
+    print("⚠️  Unsplash模块未加载")
+
 
 class MaterialRecommender:
-    """素材推荐器"""
+    """素材推荐器 (智能四级获取)"""
 
     def __init__(self, material_manager, config_path: str = 'config/settings.json'):
         """
@@ -38,17 +54,31 @@ class MaterialRecommender:
         # 初始化AI客户端
         self.ai_client = AIClient(self.config['ai'])
 
+        # 初始化外部素材获取器
+        self.pexels_fetcher = PexelsFetcher(config_path) if PEXELS_AVAILABLE else None
+        self.unsplash_fetcher = UnsplashFetcher(config_path) if UNSPLASH_AVAILABLE else None
+
+        # 智能获取配置
+        self.smart_fetch_config = self.config.get('smart_material_fetch', {
+            'enable': True,
+            'auto_download': True,
+            'prefer_videos': True,
+            'min_local_results': 3
+        })
+
     def recommend_for_script_section(
         self,
         script_section: Dict[str, Any],
-        limit: int = 5
+        limit: int = 5,
+        enable_smart_fetch: bool = True
     ) -> List[Dict[str, Any]]:
         """
-        为脚本章节推荐素材
+        为脚本章节推荐素材 (智能四级获取)
 
         Args:
             script_section: 脚本章节数据
             limit: 推荐数量
+            enable_smart_fetch: 是否启用智能获取 (从外部API)
 
         Returns:
             推荐素材列表
@@ -65,7 +95,8 @@ class MaterialRecommender:
 
         recommendations = []
 
-        # 基于关键词搜索现有素材
+        # 🔹 第一级: 本地素材库搜索
+        print("   📁 [1/4] 搜索本地素材库...")
         keywords = material_requirements.get('keywords', [])
         for keyword in keywords:
             materials = self.material_manager.search_materials(keyword)
@@ -82,6 +113,49 @@ class MaterialRecommender:
             recommendations,
             material_requirements
         )
+
+        print(f"       ✓ 找到 {len(unique_materials)} 个本地素材")
+
+        # 🔹 智能获取策略 (如果本地素材不足)
+        min_required = self.smart_fetch_config.get('min_local_results', 3)
+
+        if enable_smart_fetch and self.smart_fetch_config.get('enable', True) and len(unique_materials) < min_required:
+            print(f"       ⚠️  本地素材不足 (需要{min_required}个,仅{len(unique_materials)}个)")
+
+            # 提取英文关键词(Pexels/Unsplash需要英文)
+            search_keyword = self._extract_english_keyword(narration, visual_notes)
+
+            # 🔹 第二级: Pexels视频搜索 (优先视频)
+            if self.smart_fetch_config.get('prefer_videos', True) and self.pexels_fetcher:
+                pexels_materials = self._fetch_from_pexels_videos(
+                    search_keyword,
+                    count=limit - len(unique_materials)
+                )
+                unique_materials.extend(pexels_materials)
+                print(f"       ✓ 从Pexels视频获取 {len(pexels_materials)} 个")
+
+            # 🔹 第三级: Pexels/Unsplash图片 (如果仍不足)
+            if len(unique_materials) < limit:
+                if self.pexels_fetcher:
+                    pexels_photos = self._fetch_from_pexels_photos(
+                        search_keyword,
+                        count=max(2, limit - len(unique_materials))
+                    )
+                    unique_materials.extend(pexels_photos)
+                    print(f"       ✓ 从Pexels图片获取 {len(pexels_photos)} 个")
+
+                if self.unsplash_fetcher and len(unique_materials) < limit:
+                    unsplash_photos = self._fetch_from_unsplash(
+                        search_keyword,
+                        count=limit - len(unique_materials)
+                    )
+                    unique_materials.extend(unsplash_photos)
+                    print(f"       ✓ 从Unsplash获取 {len(unsplash_photos)} 个")
+
+            # 🔹 第四级: DALL-E生成 (最后手段,付费)
+            # 暂时注释,避免自动产生费用
+            # if len(unique_materials) < limit:
+            #     print("       💰 可选: 使用DALL-E生成 (需手动触发)")
 
         return unique_materials[:limit]
 
@@ -344,4 +418,184 @@ class MaterialRecommender:
         if used_count > 0:
             score += min(used_count, 10)
 
+        # ⭐ V5.1: 视频素材优先 +50分
+        if material.get('type') == 'video':
+            score += 50
+
         return min(score, 100)
+
+    # ===== V5.1 新增: 外部素材获取方法 =====
+
+    def _extract_english_keyword(self, narration: str, visual_notes: str) -> str:
+        """
+        提取英文关键词(用于Pexels/Unsplash搜索)
+
+        Args:
+            narration: 旁白文本
+            visual_notes: 视觉提示
+
+        Returns:
+            英文关键词
+        """
+        # 优先使用visual_notes
+        text = visual_notes if visual_notes else narration
+
+        # 简单映射(中文 → 英文科普关键词)
+        keyword_map = {
+            '宇宙': 'space universe',
+            '星空': 'stars galaxy',
+            '太空': 'space',
+            'DNA': 'DNA genetics',
+            '基因': 'DNA genetics',
+            '细胞': 'cell biology',
+            '大脑': 'brain neuroscience',
+            '神经': 'neuron brain',
+            '量子': 'quantum physics',
+            '物理': 'physics',
+            '化学': 'chemistry science',
+            '生物': 'biology nature',
+            '科技': 'technology innovation',
+            '人工智能': 'artificial intelligence AI',
+            'AI': 'artificial intelligence',
+            '机器人': 'robot technology',
+            '能源': 'energy renewable',
+            '环境': 'environment nature',
+            '海洋': 'ocean sea',
+            '地球': 'earth planet',
+            '火山': 'volcano',
+            '地震': 'earthquake',
+            '气候': 'climate weather',
+            '医学': 'medicine medical',
+            '健康': 'health medical',
+            '心脏': 'heart cardiology',
+            '肺': 'lungs respiratory',
+            '血液': 'blood circulation',
+            '分子': 'molecule chemistry',
+            '原子': 'atom physics',
+            '电子': 'electron technology',
+            '光': 'light optics',
+            '声音': 'sound wave',
+            '电': 'electricity energy'
+        }
+
+        # 查找匹配
+        for cn_keyword, en_keyword in keyword_map.items():
+            if cn_keyword in text:
+                return en_keyword
+
+        # 默认: 通用科普关键词
+        return 'science education'
+
+    def _fetch_from_pexels_videos(self, keyword: str, count: int = 3) -> List[Dict[str, Any]]:
+        """
+        从Pexels获取视频素材
+
+        Args:
+            keyword: 英文关键词
+            count: 数量
+
+        Returns:
+            素材信息列表(已转换为统一格式)
+        """
+        if not self.pexels_fetcher:
+            return []
+
+        try:
+            print(f"   🎥 [2/4] 从Pexels搜索视频: '{keyword}'...")
+
+            # 搜索
+            videos = self.pexels_fetcher.search_videos(keyword, per_page=count)
+
+            # 自动下载
+            materials = []
+            for video in videos[:count]:
+                if self.smart_fetch_config.get('auto_download', True):
+                    filepath = self.pexels_fetcher.download_video(video, keyword)
+                    if filepath:
+                        # 转换为统一格式
+                        materials.append({
+                            'id': f"pexels_video_{video['id']}",
+                            'name': f"{keyword}_{video['id']}",
+                            'type': 'video',
+                            'file_path': filepath,
+                            'tags': [keyword, 'pexels', 'HD'],
+                            'description': f"Pexels视频: {keyword}",
+                            'source': 'pexels',
+                            'match_score': 85,  # 外部视频默认高分
+                            'rating': 4,
+                            'used_count': 0
+                        })
+
+            return materials
+
+        except Exception as e:
+            print(f"       ❌ Pexels视频获取失败: {str(e)}")
+            return []
+
+    def _fetch_from_pexels_photos(self, keyword: str, count: int = 3) -> List[Dict[str, Any]]:
+        """从Pexels获取图片素材"""
+        if not self.pexels_fetcher:
+            return []
+
+        try:
+            print(f"   🖼️  [3/4] 从Pexels搜索图片: '{keyword}'...")
+
+            photos = self.pexels_fetcher.search_photos(keyword, per_page=count)
+
+            materials = []
+            for photo in photos[:count]:
+                if self.smart_fetch_config.get('auto_download', True):
+                    filepath = self.pexels_fetcher.download_photo(photo, keyword)
+                    if filepath:
+                        materials.append({
+                            'id': f"pexels_photo_{photo['id']}",
+                            'name': f"{keyword}_{photo['id']}",
+                            'type': 'image',
+                            'file_path': filepath,
+                            'tags': [keyword, 'pexels', 'HD'],
+                            'description': f"Pexels图片: {keyword}",
+                            'source': 'pexels',
+                            'match_score': 75,
+                            'rating': 4,
+                            'used_count': 0
+                        })
+
+            return materials
+
+        except Exception as e:
+            print(f"       ❌ Pexels图片获取失败: {str(e)}")
+            return []
+
+    def _fetch_from_unsplash(self, keyword: str, count: int = 3) -> List[Dict[str, Any]]:
+        """从Unsplash获取高质量图片"""
+        if not self.unsplash_fetcher:
+            return []
+
+        try:
+            print(f"   📸 [3/4] 从Unsplash搜索图片: '{keyword}'...")
+
+            photos = self.unsplash_fetcher.search_photos(keyword, per_page=count)
+
+            materials = []
+            for photo in photos[:count]:
+                if self.smart_fetch_config.get('auto_download', True):
+                    filepath = self.unsplash_fetcher.download_photo(photo, keyword, quality='regular')
+                    if filepath:
+                        materials.append({
+                            'id': f"unsplash_{photo['id']}",
+                            'name': f"{keyword}_{photo['id']}",
+                            'type': 'image',
+                            'file_path': filepath,
+                            'tags': [keyword, 'unsplash', 'HD'],
+                            'description': photo.get('description', f"Unsplash: {keyword}"),
+                            'source': 'unsplash',
+                            'match_score': 80,
+                            'rating': 5,  # Unsplash质量最高
+                            'used_count': 0
+                        })
+
+            return materials
+
+        except Exception as e:
+            print(f"       ❌ Unsplash获取失败: {str(e)}")
+            return []

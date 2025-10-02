@@ -100,5 +100,32 @@
       "low": 3.0
     },
     "description": "智能动效系统配置 - AI驱动的转场和动画"
+  },
+
+  "pexels": {
+    "api_key": "",
+    "description": "Pexels API密钥 - 免费申请: https://www.pexels.com/api/",
+    "rate_limit_per_hour": 200,
+    "auto_download": true,
+    "preferred_video_quality": "hd",
+    "preferred_photo_quality": "large2x"
+  },
+
+  "unsplash": {
+    "access_key": "",
+    "description": "Unsplash Access Key - 免费注册: https://unsplash.com/developers",
+    "rate_limit_per_hour": 50,
+    "auto_download": true,
+    "preferred_quality": "regular"
+  },
+
+  "smart_material_fetch": {
+    "enable": true,
+    "auto_download": true,
+    "prefer_videos": true,
+    "min_local_results": 3,
+    "description": "智能素材获取: 本地→Pexels→Unsplash→DALL-E四级策略",
+    "fallback_to_dalle": false,
+    "cache_duration_days": 7
   }
 }
