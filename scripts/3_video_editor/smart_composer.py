@@ -128,10 +128,12 @@ class SmartVideoComposer(VideoComposer):
         if not self.editor.moviepy_available:
             raise ImportError("moviepy未安装。请运行: pip install moviepy")
 
-        from moviepy.editor import (
+        from moviepy import (
             ImageClip, VideoFileClip, TextClip, CompositeVideoClip,
             concatenate_videoclips, AudioFileClip
         )
+        from moviepy.video.fx import Loop, FadeIn, CrossFadeIn
+        from moviepy.audio.fx import AudioLoop
 
         print(f"\n🎬 智能视频合成: {script.get('title', '未命名')}")
         print("=" * 70)
@@ -168,7 +170,10 @@ class SmartVideoComposer(VideoComposer):
                 auto_select_materials
             )
 
-            duration = section.get('duration', self.default_image_duration)
+            duration = self._parse_duration(
+                section.get('duration', self.default_image_duration),
+                default=self.default_image_duration
+            )
 
             # 2.2 创建基础clip
             clip = self._create_base_clip(material_path, duration)
@@ -271,18 +276,18 @@ class SmartVideoComposer(VideoComposer):
 
     def _create_base_clip(self, material_path: Optional[str], duration: float):
         """创建基础clip"""
-        from moviepy.editor import ImageClip, VideoFileClip
+        from moviepy import ImageClip, VideoFileClip
 
         if material_path and os.path.exists(material_path):
             ext = os.path.splitext(material_path)[1].lower()
             if ext in ['.jpg', '.jpeg', '.png', '.gif', '.bmp']:
-                return ImageClip(material_path).set_duration(duration)
+                return ImageClip(material_path).with_duration(duration)
             elif ext in ['.mp4', '.avi', '.mov', '.mkv']:
                 video_clip = VideoFileClip(material_path)
                 if video_clip.duration < duration:
-                    return video_clip.loop(duration=duration)
+                    return video_clip.with_effects([Loop(duration=duration)])
                 else:
-                    return video_clip.subclip(0, duration)
+                    return video_clip.subclipped(0, duration)
             else:
                 print(f"   ⚠️  不支持的格式: {ext}")
                 return self._create_color_clip((0, 0, 0), duration)
@@ -296,7 +301,7 @@ class SmartVideoComposer(VideoComposer):
         params = transition.get('params', {})
 
         if trans_type == 'fade':
-            return clip.fadein(duration)
+            return clip.with_effects([FadeIn(duration)])
         elif trans_type == 'zoom_in':
             zoom_ratio = params.get('zoom_ratio', 1.3)
             return TransitionLibrary.zoom_in(clip, duration, zoom_ratio)
@@ -310,7 +315,7 @@ class SmartVideoComposer(VideoComposer):
         elif trans_type == 'hard_cut':
             return clip  # 无转场
         elif trans_type == 'crossfade':
-            return clip.crossfadein(duration)
+            return clip.with_effects([CrossFadeIn(duration)])
         else:
             return clip
 
@@ -322,8 +327,7 @@ class SmartVideoComposer(VideoComposer):
         audio_clips: list
     ):
         """添加音频（TTS或BGM）"""
-        from moviepy.editor import AudioFileClip, concatenate_audioclips
-        from moviepy.audio.AudioClip import CompositeAudioClip
+        from moviepy import AudioFileClip, concatenate_audioclips, CompositeAudioClip
 
         if use_tts and tts_metadata_path and os.path.exists(tts_metadata_path):
             print("\n🎙️  添加TTS语音...")
@@ -347,19 +351,19 @@ class SmartVideoComposer(VideoComposer):
                         if bgm_path and os.path.exists(bgm_path):
                             bgm = AudioFileClip(bgm_path)
                             if bgm.duration < tts_audio.duration:
-                                bgm = bgm.loop(duration=tts_audio.duration)
+                                bgm = bgm.with_effects([AudioLoop(duration=tts_audio.duration)])
                             else:
-                                bgm = bgm.subclip(0, tts_audio.duration)
-                            bgm = bgm.volumex(0.2)
+                                bgm = bgm.subclipped(0, tts_audio.duration)
+                            bgm = bgm.with_volume_scaled(0.2)
                             final_audio = CompositeAudioClip([tts_audio, bgm])
                         else:
                             final_audio = tts_audio
 
-                        video_clip = video_clip.set_audio(final_audio)
+                        video_clip = video_clip.with_audio(final_audio)
                         print(f"   ✅ TTS音频已添加 (时长: {tts_audio.duration:.1f}秒)")
 
                         if video_clip.duration != tts_audio.duration:
-                            video_clip = video_clip.set_duration(tts_audio.duration)
+                            video_clip = video_clip.with_duration(tts_audio.duration)
             except Exception as e:
                 print(f"   ⚠️  添加TTS失败: {str(e)}")
         else:
@@ -370,10 +374,10 @@ class SmartVideoComposer(VideoComposer):
                 try:
                     audio = AudioFileClip(bgm_path)
                     if audio.duration < video_clip.duration:
-                        audio = audio.loop(duration=video_clip.duration)
+                        audio = audio.with_effects([AudioLoop(duration=video_clip.duration)])
                     else:
-                        audio = audio.subclip(0, video_clip.duration)
-                    video_clip = video_clip.set_audio(audio)
+                        audio = audio.subclipped(0, video_clip.duration)
+                    video_clip = video_clip.with_audio(audio)
                 except Exception as e:
                     print(f"   ⚠️  添加BGM失败: {str(e)}")
 
@@ -384,12 +388,12 @@ class SmartVideoComposer(VideoComposer):
         print(f"\n📝 添加字幕: {subtitle_file}")
         try:
             from moviepy.video.tools.subtitles import SubtitlesClip
-            from moviepy.editor import TextClip, CompositeVideoClip
+            from moviepy import TextClip, CompositeVideoClip
 
             def generator(txt):
                 return TextClip(
-                    txt,
-                    fontsize=self.video_config.get('text_size', 48),
+                    text=txt,
+                    font_size=self.video_config.get('text_size', 48),
                     color='white',
                     bg_color='black',
                     method='caption',
@@ -399,7 +403,7 @@ class SmartVideoComposer(VideoComposer):
             subtitles = SubtitlesClip(subtitle_file, generator)
             video_clip = CompositeVideoClip([
                 video_clip,
-                subtitles.set_position(('center', 'bottom'))
+                subtitles.with_position(('center', 'bottom'))
             ])
 
             print("   ✅ 字幕已添加")

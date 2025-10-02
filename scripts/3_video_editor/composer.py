@@ -33,7 +33,7 @@ class VideoComposer:
             self.config = json.load(f)
 
         self.editor = VideoEditor(config_path)
-        self.material_manager = MaterialManager(config_path)
+        self.material_manager = MaterialManager()  # 使用默认参数
         self.recommender = MaterialRecommender(self.material_manager, config_path)
 
         self.video_config = self.config.get('video', {})
@@ -66,10 +66,12 @@ class VideoComposer:
         if not self.editor.moviepy_available:
             raise ImportError("moviepy未安装。请运行: pip install moviepy")
 
-        from moviepy.editor import (
+        from moviepy import (
             ImageClip, VideoFileClip, TextClip, CompositeVideoClip,
             concatenate_videoclips, AudioFileClip
         )
+        from moviepy.video.fx import Loop
+        from moviepy.audio.fx import AudioLoop
 
         print(f"\n🎬 开始合成视频: {script.get('title', '未命名')}")
         print("=" * 60)
@@ -90,7 +92,10 @@ class VideoComposer:
             # 获取章节信息
             narration = section.get('narration', '')
             visual_notes = section.get('visual_notes', '')
-            duration = section.get('duration', self.default_image_duration)
+            duration = self._parse_duration(
+                section.get('duration', self.default_image_duration),
+                default=self.default_image_duration
+            )
 
             # 推荐素材
             if auto_select_materials:
@@ -115,14 +120,14 @@ class VideoComposer:
                 # 根据素材类型创建剪辑
                 ext = os.path.splitext(material_path)[1].lower()
                 if ext in ['.jpg', '.jpeg', '.png', '.gif', '.bmp']:
-                    clip = ImageClip(material_path).set_duration(duration)
+                    clip = ImageClip(material_path).with_duration(duration)
                 elif ext in ['.mp4', '.avi', '.mov', '.mkv']:
                     video_clip = VideoFileClip(material_path)
                     # 如果视频长度不够，循环播放
                     if video_clip.duration < duration:
-                        clip = video_clip.loop(duration=duration)
+                        clip = video_clip.with_effects([Loop(duration=duration)])
                     else:
-                        clip = video_clip.subclip(0, duration)
+                        clip = video_clip.subclipped(0, duration)
                 else:
                     print(f"   ⚠️  不支持的素材格式: {ext}")
                     clip = self._create_color_clip((0, 0, 0), duration)
@@ -164,7 +169,7 @@ class VideoComposer:
                     tts_audio_clips = [AudioFileClip(f) for f in audio_files if os.path.exists(f)]
                     audio_clips.extend(tts_audio_clips)  # 追踪以便清理
                     if tts_audio_clips:
-                        from moviepy.editor import concatenate_audioclips
+                        from moviepy import concatenate_audioclips
                         tts_audio = concatenate_audioclips(tts_audio_clips)
 
                         # 添加BGM作为背景(降低音量)
@@ -172,24 +177,24 @@ class VideoComposer:
                         if bgm_path and os.path.exists(bgm_path):
                             bgm = AudioFileClip(bgm_path)
                             if bgm.duration < tts_audio.duration:
-                                bgm = bgm.loop(duration=tts_audio.duration)
+                                bgm = bgm.with_effects([AudioLoop(duration=tts_audio.duration)])
                             else:
-                                bgm = bgm.subclip(0, tts_audio.duration)
+                                bgm = bgm.subclipped(0, tts_audio.duration)
                             # 降低BGM音量
-                            bgm = bgm.volumex(0.2)
+                            bgm = bgm.with_volume_scaled(0.2)
                             # 混合TTS和BGM
                             from moviepy.audio.AudioClip import CompositeAudioClip
                             final_audio = CompositeAudioClip([tts_audio, bgm])
                         else:
                             final_audio = tts_audio
 
-                        final_video = final_video.set_audio(final_audio)
+                        final_video = final_video.with_audio(final_audio)
                         print(f"   ✅ TTS音频已添加 (时长: {tts_audio.duration:.1f}秒)")
 
                         # 调整视频长度以匹配音频
                         if final_video.duration != tts_audio.duration:
                             print(f"   ⚠️  调整视频长度: {final_video.duration:.1f}秒 -> {tts_audio.duration:.1f}秒")
-                            final_video = final_video.set_duration(tts_audio.duration)
+                            final_video = final_video.with_duration(tts_audio.duration)
             except Exception as e:
                 print(f"   ⚠️  添加TTS音频失败: {str(e)}")
                 import traceback
@@ -203,11 +208,11 @@ class VideoComposer:
                     audio = AudioFileClip(bgm_path)
                     # 循环背景音乐以匹配视频长度
                     if audio.duration < final_video.duration:
-                        audio = audio.loop(duration=final_video.duration)
+                        audio = audio.with_effects([AudioLoop(duration=final_video.duration)])
                     else:
-                        audio = audio.subclip(0, final_video.duration)
+                        audio = audio.subclipped(0, final_video.duration)
 
-                    final_video = final_video.set_audio(audio)
+                    final_video = final_video.with_audio(audio)
                 except Exception as e:
                     print(f"   ⚠️  添加音乐失败: {str(e)}")
 
@@ -219,10 +224,10 @@ class VideoComposer:
 
                 # 创建字幕函数
                 def generator(txt):
-                    from moviepy.editor import TextClip
+                    from moviepy import TextClip
                     return TextClip(
-                        txt,
-                        fontsize=self.video_config.get('text_size', 48),
+                        text=txt,
+                        font_size=self.video_config.get('text_size', 48),
                         color='white',
                         bg_color='black',
                         method='caption',
@@ -233,10 +238,10 @@ class VideoComposer:
                 subtitles = SubtitlesClip(subtitle_file, generator)
 
                 # 合成视频和字幕
-                from moviepy.editor import CompositeVideoClip
+                from moviepy import CompositeVideoClip
                 final_video = CompositeVideoClip([
                     final_video,
-                    subtitles.set_position(('center', 'bottom'))
+                    subtitles.with_position(('center', 'bottom'))
                 ])
 
                 print("   ✅ 字幕已添加")
@@ -320,7 +325,7 @@ class VideoComposer:
         if not self.editor.moviepy_available:
             raise ImportError("moviepy未安装")
 
-        from moviepy.editor import (
+        from moviepy import (
             ImageClip, VideoFileClip, TextClip, CompositeVideoClip,
             concatenate_videoclips
         )
@@ -334,17 +339,20 @@ class VideoComposer:
             material_path = material_mapping.get(i)
 
             if material_path and os.path.exists(material_path):
-                duration = section.get('duration', self.default_image_duration)
+                duration = self._parse_duration(
+                    section.get('duration', self.default_image_duration),
+                    default=self.default_image_duration
+                )
 
                 ext = os.path.splitext(material_path)[1].lower()
                 if ext in ['.jpg', '.jpeg', '.png', '.gif', '.bmp']:
-                    clip = ImageClip(material_path).set_duration(duration)
+                    clip = ImageClip(material_path).with_duration(duration)
                 elif ext in ['.mp4', '.avi', '.mov', '.mkv']:
                     video_clip = VideoFileClip(material_path)
                     if video_clip.duration < duration:
-                        clip = video_clip.loop(duration=duration)
+                        clip = video_clip.with_effects([Loop(duration=duration)])
                     else:
-                        clip = video_clip.subclip(0, duration)
+                        clip = video_clip.subclipped(0, duration)
                 else:
                     continue
 
@@ -418,9 +426,14 @@ class VideoComposer:
 
     def _create_color_clip(self, color: Tuple[int, int, int], duration: float):
         """创建纯色剪辑"""
-        from moviepy.editor import ColorClip
+        from moviepy import ColorClip
 
-        size = self.video_config.get('resolution', [1920, 1080])
+        # 兼容字典和列表两种resolution格式
+        resolution = self.video_config.get('resolution', {'width': 1920, 'height': 1080})
+        if isinstance(resolution, dict):
+            size = (resolution.get('width', 1920), resolution.get('height', 1080))
+        else:
+            size = resolution  # 向后兼容列表格式
         return ColorClip(size=size, color=color, duration=duration)
 
     def _create_text_clip(
@@ -433,7 +446,7 @@ class VideoComposer:
         bg_color: str = 'black'
     ):
         """创建文字剪辑"""
-        from moviepy.editor import TextClip
+        from moviepy import TextClip
 
         # 文字换行处理
         max_chars_per_line = 30
@@ -454,14 +467,21 @@ class VideoComposer:
 
         formatted_text = "\n".join(lines[:3])  # 最多3行
 
+        # 兼容字典和列表两种resolution格式
+        resolution = self.video_config.get('resolution', {'width': 1920, 'height': 1080})
+        if isinstance(resolution, dict):
+            width = resolution.get('width', 1920)
+        else:
+            width = resolution[0]  # 向后兼容列表格式
+
         txt_clip = TextClip(
-            formatted_text,
-            fontsize=fontsize,
+            text=formatted_text,
+            font_size=fontsize,
             color=color,
             bg_color=bg_color,
             method='caption',
-            size=(self.video_config.get('resolution', [1920, 1080])[0] - 200, None)
-        ).set_duration(duration).set_position(position)
+            size=(width - 200, None)
+        ).with_duration(duration).with_position(position)
 
         return txt_clip
 
@@ -477,7 +497,10 @@ class VideoComposer:
         """
         sections = script.get('sections', [])
 
-        total_duration = sum(s.get('duration', self.default_image_duration) for s in sections)
+        total_duration = sum(
+            self._parse_duration(s.get('duration', self.default_image_duration), self.default_image_duration)
+            for s in sections
+        )
 
         info = {
             'title': script.get('title', '未命名'),
@@ -491,7 +514,10 @@ class VideoComposer:
             section_info = {
                 'index': i,
                 'name': section.get('section_name', f'章节{i}'),
-                'duration': section.get('duration', self.default_image_duration),
+                'duration': self._parse_duration(
+                    section.get('duration', self.default_image_duration),
+                    self.default_image_duration
+                ),
                 'has_narration': bool(section.get('narration')),
                 'has_visual_notes': bool(section.get('visual_notes'))
             }
@@ -504,3 +530,40 @@ class VideoComposer:
         # 粗略估算：1080p 24fps 约 5MB/分钟
         bitrate_mb_per_min = self.video_config.get('estimated_bitrate_mb_per_min', 5.0)
         return round((duration / 60.0) * bitrate_mb_per_min, 2)
+
+    def _parse_duration(self, duration_value: Any, default: float = 5.0) -> float:
+        """
+        解析duration值，支持字符串和数字格式
+
+        Args:
+            duration_value: duration值（可能是"15秒"、"15s"、15、15.0等）
+            default: 解析失败时的默认值
+
+        Returns:
+            解析后的浮点数秒数
+
+        Examples:
+            "15秒" -> 15.0
+            "110秒" -> 110.0
+            "15s" -> 15.0
+            15 -> 15.0
+            15.0 -> 15.0
+        """
+        import re
+
+        # 如果已经是数字，直接返回
+        if isinstance(duration_value, (int, float)):
+            return float(duration_value)
+
+        # 如果是字符串，提取数字
+        if isinstance(duration_value, str):
+            # 匹配数字（整数或小数）
+            match = re.search(r'(\d+\.?\d*)', duration_value)
+            if match:
+                try:
+                    return float(match.group(1))
+                except ValueError:
+                    pass
+
+        # 解析失败，返回默认值
+        return default

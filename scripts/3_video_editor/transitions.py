@@ -5,6 +5,7 @@
 
 from typing import Callable, List
 import numpy as np
+from moviepy.video.fx import FadeIn, FadeOut
 
 
 class TransitionLibrary:
@@ -13,22 +14,22 @@ class TransitionLibrary:
     @staticmethod
     def fade_in(clip, duration: float = 1.0):
         """淡入效果"""
-        return clip.fadein(duration)
+        return clip.with_effects([FadeIn(duration)])
 
     @staticmethod
     def fade_out(clip, duration: float = 1.0):
         """淡出效果"""
-        return clip.fadeout(duration)
+        return clip.with_effects([FadeOut(duration)])
 
     @staticmethod
     def crossfade(clip1, clip2, duration: float = 1.0):
         """交叉淡化（两个片段之间）"""
-        from moviepy.editor import CompositeVideoClip
+        from moviepy import CompositeVideoClip
 
         # clip1淡出
-        clip1_faded = clip1.fadeout(duration)
+        clip1_faded = clip1.with_effects([FadeOut(duration)])
         # clip2淡入，并设置开始时间
-        clip2_faded = clip2.fadein(duration).set_start(clip1.duration - duration)
+        clip2_faded = clip2.with_effects([FadeIn(duration)]).set_start(clip1.duration - duration)
 
         # 合成
         return CompositeVideoClip([clip1_faded, clip2_faded])
@@ -58,7 +59,7 @@ class TransitionLibrary:
             # 从底部滑入
             position = lambda t: (0, min(h, h - int(h * t / duration))) if t < duration else (0, 0)
 
-        return clip.set_position(position)
+        return clip.with_position(position)
 
     @staticmethod
     def zoom_in(clip, duration: float = 1.0, zoom_ratio: float = 1.5):
@@ -122,7 +123,7 @@ class TransitionLibrary:
             duration: 转场时长
             direction: 方向 ('left', 'right', 'top', 'bottom')
         """
-        from moviepy.editor import CompositeVideoClip
+        from moviepy import CompositeVideoClip
 
         w, h = clip1.size
 
@@ -152,7 +153,7 @@ class TransitionLibrary:
             else:
                 return clip2.get_frame(t - clip1.duration)
 
-        from moviepy.editor import VideoClip
+        from moviepy import VideoClip
         total_duration = clip1.duration + clip2.duration - duration
         return VideoClip(make_frame=make_frame, duration=total_duration)
 

@@ -184,7 +184,7 @@ class KenBurnsGenerator:
         # 先放大图片以避免边缘黑边
         clip = clip.resize(1.15)
 
-        return clip.set_position(position_func)
+        return clip.with_position(position_func)
 
     def _diagonal_zoom(self, clip, duration: float):
         """
@@ -215,7 +215,7 @@ class KenBurnsGenerator:
             return (x_offset, y_offset)
 
         clip = clip.resize(resize_func)
-        return clip.set_position(position_func)
+        return clip.with_position(position_func)
 
     def get_movement_description(self, movement_type: str) -> str:
         """
@@ -244,7 +244,7 @@ class KenBurnsGenerator:
 if __name__ == "__main__":
     # 模拟测试（需要moviepy）
     try:
-        from moviepy.editor import ImageClip
+        from moviepy import ImageClip
         import numpy as np
 
         print("🎨 Ken Burns效果测试\n")
@@ -252,7 +252,7 @@ if __name__ == "__main__":
 
         # 创建测试图片
         test_image = np.random.randint(0, 255, (720, 1280, 3), dtype=np.uint8)
-        clip = ImageClip(test_image).set_duration(5.0)
+        clip = ImageClip(test_image).with_duration(5.0)
 
         generator = KenBurnsGenerator()
 

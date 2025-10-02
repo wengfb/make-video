@@ -61,7 +61,7 @@ class VideoEditor:
         if not self.moviepy_available:
             raise ImportError("moviepy未安装。请运行: pip install moviepy")
 
-        from moviepy.editor import ImageClip, concatenate_videoclips
+        from moviepy import ImageClip, concatenate_videoclips
 
         # 默认持续时间
         if durations is None:
@@ -71,7 +71,7 @@ class VideoEditor:
         clips = []
         for img_path, duration in zip(images, durations):
             if os.path.exists(img_path):
-                clip = ImageClip(img_path).set_duration(duration)
+                clip = ImageClip(img_path).with_duration(duration)
                 clips.append(clip)
             else:
                 print(f"⚠️  图片不存在，跳过: {img_path}")
@@ -119,13 +119,13 @@ class VideoEditor:
         if not self.moviepy_available:
             raise ImportError("moviepy未安装")
 
-        from moviepy.editor import VideoFileClip, AudioFileClip
+        from moviepy import VideoFileClip, AudioFileClip
 
         video = VideoFileClip(video_path)
         audio = AudioFileClip(audio_path)
 
         # 设置音频
-        final_video = video.set_audio(audio)
+        final_video = video.with_audio(audio)
 
         # 输出文件名
         if output_filename is None:
@@ -168,16 +168,16 @@ class VideoEditor:
         if not self.moviepy_available:
             raise ImportError("moviepy未安装")
 
-        from moviepy.editor import VideoFileClip, TextClip, CompositeVideoClip
+        from moviepy import VideoFileClip, TextClip, CompositeVideoClip
 
         video = VideoFileClip(video_path)
 
         # 创建文字剪辑
         txt_clip = TextClip(
-            text,
-            fontsize=fontsize,
+            text=text,
+            font_size=fontsize,
             color=color
-        ).set_position(position).set_duration(duration or video.duration)
+        ).with_position(position).with_duration(duration or video.duration)
 
         # 合成
         final_video = CompositeVideoClip([video, txt_clip])
@@ -208,7 +208,7 @@ class VideoEditor:
         if not self.moviepy_available:
             raise ImportError("moviepy未安装")
 
-        from moviepy.editor import VideoFileClip
+        from moviepy import VideoFileClip
 
         video = VideoFileClip(video_path)
 
@@ -247,9 +247,9 @@ class VideoEditor:
         if not self.moviepy_available:
             raise ImportError("moviepy未安装")
 
-        from moviepy.editor import VideoFileClip
+        from moviepy import VideoFileClip
 
-        video = VideoFileClip(video_path).subclip(start_time, end_time)
+        video = VideoFileClip(video_path).subclipped(start_time, end_time)
 
         # 输出文件名
         if output_filename is None:
@@ -282,7 +282,7 @@ class VideoEditor:
         if not self.moviepy_available:
             raise ImportError("moviepy未安装")
 
-        from moviepy.editor import VideoFileClip, concatenate_videoclips
+        from moviepy import VideoFileClip, concatenate_videoclips
 
         clips = [VideoFileClip(path) for path in video_paths if os.path.exists(path)]
 
