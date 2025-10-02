@@ -64,21 +64,38 @@ class FFmpegTimelineRenderer:
         threads: Optional[int],
         nvenc_params: Optional[List[str]],
         audio_plan: Optional[AudioPlan],
+        subtitle_file: Optional[str] = None,
+        subtitle_style: Optional[Dict[str, str]] = None,
     ) -> None:
         if not segments:
             raise ValueError("segments must not be empty")
 
         width, height = resolution
+        # 如果有字幕文件，禁用segment级别的文字显示（避免重复）
+        use_segment_text = subtitle_file is None
+
         video_inputs, filter_graph, concat_label = self._build_video_filters(
             segments=segments,
             fps=fps,
             resolution=(width, height),
+            use_segment_text=use_segment_text,
         )
 
         audio_inputs, audio_label, audio_filters = self._build_audio_filters(
             len(video_inputs),
             audio_plan,
         )
+
+        # 如果有字幕文件，在concat之后添加字幕filter
+        final_video_label = concat_label
+        if subtitle_file and os.path.exists(subtitle_file):
+            subtitle_filter = self._build_subtitle_filter(
+                concat_label,
+                subtitle_file,
+                subtitle_style,
+            )
+            filter_graph.append(subtitle_filter)
+            final_video_label = "[vfinal]"
 
         filter_parts = filter_graph + audio_filters
         filter_complex = ";".join(part for part in filter_parts if part)
@@ -96,7 +113,7 @@ class FFmpegTimelineRenderer:
         if filter_complex:
             cmd.extend(["-filter_complex", filter_complex])
 
-        cmd.extend(["-map", concat_label])
+        cmd.extend(["-map", final_video_label])
         if audio_label:
             cmd.extend(["-map", audio_label])
 
@@ -136,6 +153,7 @@ class FFmpegTimelineRenderer:
         segments: Sequence[SegmentSpec],
         fps: int,
         resolution: Tuple[int, int],
+        use_segment_text: bool = True,
     ) -> Tuple[List[List[str]], List[str], str]:
         width, height = resolution
         inputs: List[List[str]] = []
@@ -154,6 +172,7 @@ class FFmpegTimelineRenderer:
                 segment=segment,
                 fps=fps,
                 resolution=resolution,
+                use_segment_text=use_segment_text,
             )
             filters.append(filter_chain)
 
@@ -200,6 +219,7 @@ class FFmpegTimelineRenderer:
         segment: SegmentSpec,
         fps: int,
         resolution: Tuple[int, int],
+        use_segment_text: bool = True,
     ) -> str:
         width, height = resolution
         label = f"[{input_index}:v]"
@@ -217,7 +237,8 @@ class FFmpegTimelineRenderer:
         chain.append("setpts=PTS-STARTPTS")
         chain.append(f"fps={fps}")
 
-        if segment.text:
+        # 只有在use_segment_text=True时才添加segment文字（避免与字幕文件重复）
+        if use_segment_text and segment.text:
             chain.append(self._drawtext_filter(segment.text, segment.text_style))
 
         chain.extend(["format=yuv420p", "setsar=1"])
@@ -281,6 +302,70 @@ class FFmpegTimelineRenderer:
     # ------------------------------------------------------------------
     # Helpers
     # ------------------------------------------------------------------
+    def _build_subtitle_filter(
+        self,
+        input_label: str,
+        subtitle_file: str,
+        style: Optional[Dict[str, str]],
+    ) -> str:
+        """
+        构建字幕filter（使用FFmpeg subtitles filter）
+
+        Args:
+            input_label: 输入视频的label（如"[vout]"）
+            subtitle_file: 字幕文件路径（.srt或.ass）
+            style: 字幕样式配置
+
+        Returns:
+            完整的字幕filter字符串
+        """
+        style = style or {}
+
+        # 转义字幕文件路径（FFmpeg filter需要）
+        # 在Windows和Linux上，路径中的反斜杠和冒号需要转义
+        escaped_path = subtitle_file.replace('\\', '\\\\').replace(':', '\\:')
+
+        # 构建ASS样式覆盖
+        fontsize = style.get("fontsize", "48")
+        fontcolor = style.get("fontcolor", "white")
+        bg_color = style.get("bg_color", "black")
+        bg_opacity = style.get("bg_opacity", "0.5")
+
+        # 将颜色转换为ASS格式 (&HAABBGGRR，注意是BGR顺序)
+        # 这里简化处理，只支持基本颜色名
+        color_map = {
+            "white": "&H00FFFFFF",
+            "black": "&H00000000",
+            "yellow": "&H0000FFFF",
+            "red": "&H000000FF",
+            "blue": "&H00FF0000",
+        }
+
+        primary_color = color_map.get(fontcolor.lower(), "&H00FFFFFF")
+        back_color = color_map.get(bg_color.lower(), "&H00000000")
+
+        # 计算背景透明度（ASS使用0-255，0为不透明）
+        try:
+            opacity_value = float(bg_opacity)
+            ass_alpha = int((1.0 - opacity_value) * 255)
+            back_color_with_alpha = f"&H{ass_alpha:02X}000000"
+        except (ValueError, TypeError):
+            back_color_with_alpha = "&H80000000"  # 默认50%透明
+
+        # 构建force_style字符串（ASS样式覆盖）
+        force_style_parts = [
+            f"FontSize={fontsize}",
+            f"PrimaryColour={primary_color}",
+            f"BackColour={back_color_with_alpha}",
+            "Alignment=2",  # 底部居中
+            "MarginV=50",   # 垂直边距
+        ]
+
+        force_style = ",".join(force_style_parts)
+
+        # 返回完整的filter字符串
+        return f"{input_label}subtitles={escaped_path}:force_style='{force_style}'[vfinal]"
+
     def _drawtext_filter(self, text: str, style: Optional[Dict[str, str]]) -> str:
         style = style or {}
         font_path = style.get("font") or ""

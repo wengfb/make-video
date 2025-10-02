@@ -151,12 +151,13 @@ class MaterialScanner:
 
         return unregistered
 
-    def register_materials(self, materials: List[Dict]) -> int:
+    def register_materials(self, materials: List[Dict], copy_file: bool = False) -> int:
         """
         批量注册素材
 
         Args:
             materials: 素材信息列表
+            copy_file: 是否复制文件（False=原地注册，不复制）
 
         Returns:
             成功注册的数量
@@ -170,7 +171,8 @@ class MaterialScanner:
                     file_path=material['file_path'],
                     material_type=material['type'],
                     tags=material['tags'],
-                    description=f"自动扫描: {material['name']}"
+                    description=f"自动扫描: {material['name']}",
+                    copy_file=copy_file
                 )
                 count += 1
             except Exception as e:

@@ -122,6 +122,7 @@ class VideoComposer:
             output_path=output_path,
             use_tts_audio=use_tts_audio,
             tts_metadata_path=tts_metadata_path,
+            subtitle_file=subtitle_file,
         )
 
         print(f"\n✅ 视频合成完成: {output_path}")
@@ -270,6 +271,7 @@ class VideoComposer:
         output_path: str,
         use_tts_audio: bool,
         tts_metadata_path: Optional[str],
+        subtitle_file: Optional[str] = None,
     ) -> Tuple[float, int]:
         segments = self._build_segments(
             sections=sections,
@@ -324,6 +326,18 @@ class VideoComposer:
         else:
             preset = self.video_config.get('preset', 'medium')
 
+        # 构建字幕样式配置
+        subtitle_style = None
+        if subtitle_file and os.path.exists(subtitle_file):
+            subtitle_cfg = self.config.get('subtitle', {})
+            subtitle_style = {
+                'fontsize': str(subtitle_cfg.get('font_size', 48)),
+                'fontcolor': subtitle_cfg.get('font_color', 'white'),
+                'bg_color': subtitle_cfg.get('bg_color', 'black'),
+                'bg_opacity': str(subtitle_cfg.get('bg_opacity', 0.5)),
+            }
+            print(f"   📝 使用字幕文件: {os.path.basename(subtitle_file)}")
+
         render_kwargs = dict(
             segments=segments,
             output_path=output_path,
@@ -335,6 +349,8 @@ class VideoComposer:
             threads=self.video_config.get('threads'),
             nvenc_params=nvenc_params,
             audio_plan=audio_plan,
+            subtitle_file=subtitle_file,
+            subtitle_style=subtitle_style,
         )
 
         try:

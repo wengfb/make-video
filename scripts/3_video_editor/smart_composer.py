@@ -431,31 +431,49 @@ class SmartVideoComposer(VideoComposer):
         return video_clip
 
     def _add_subtitles(self, video_clip, subtitle_file: str):
-        """添加字幕"""
+        """添加字幕（使用moviepy SubtitlesClip）"""
         print(f"\n📝 添加字幕: {subtitle_file}")
         try:
             from moviepy.video.tools.subtitles import SubtitlesClip
             from moviepy import TextClip, CompositeVideoClip
 
+            # 获取字幕配置
+            subtitle_cfg = self.config.get('subtitle', {})
+            font_size = subtitle_cfg.get('font_size', 48)
+            font_color = subtitle_cfg.get('font_color', 'white')
+            bg_color = subtitle_cfg.get('bg_color', 'black')
+            bg_opacity = subtitle_cfg.get('bg_opacity', 0.5)
+
+            # 计算背景色（带透明度）
+            bg_alpha = int(bg_opacity * 255)
+            bg_with_alpha = (0, 0, 0, bg_alpha) if bg_color.lower() == 'black' else bg_color
+
             def generator(txt):
+                # 使用label方法确保文字居中，而不是caption
                 return TextClip(
                     text=txt,
-                    font_size=self.video_config.get('text_size', 48),
-                    color='white',
-                    bg_color='black',
-                    method='caption',
-                    size=(video_clip.w - 200, None)
+                    font_size=font_size,
+                    color=font_color,
+                    bg_color=bg_color,
+                    method='label',  # 使用label而不是caption，确保居中
                 )
 
             subtitles = SubtitlesClip(subtitle_file, generator)
+
+            # 设置字幕位置：水平居中，垂直靠下
+            margin_bottom = subtitle_cfg.get('margin_v', 50)
+            subtitle_position = ('center', video_clip.h - margin_bottom)
+
             video_clip = CompositeVideoClip([
                 video_clip,
-                subtitles.with_position(('center', 'bottom'))
+                subtitles.with_position(subtitle_position)
             ])
 
             print("   ✅ 字幕已添加")
         except Exception as e:
             print(f"   ⚠️  添加字幕失败: {str(e)}")
+            import traceback
+            traceback.print_exc()
 
         return video_clip
 

@@ -60,7 +60,8 @@ class MaterialManager:
         description: Optional[str] = None,
         tags: Optional[List[str]] = None,
         category: Optional[str] = None,
-        metadata: Optional[Dict] = None
+        metadata: Optional[Dict] = None,
+        copy_file: bool = True
     ) -> str:
         """
         添加素材到素材库
@@ -73,6 +74,7 @@ class MaterialManager:
             tags: 标签列表
             category: 分类
             metadata: 额外元数据
+            copy_file: 是否复制文件到素材库 (True=复制并重命名, False=原地注册)
 
         Returns:
             素材ID
@@ -92,14 +94,21 @@ class MaterialManager:
 
         target_dir = type_dirs[material_type]
 
-        # 生成素材ID和文件名
-        material_id = self._generate_material_id(file_path)
-        file_ext = Path(file_path).suffix
-        new_filename = f"{material_id}{file_ext}"
-        target_path = os.path.join(target_dir, new_filename)
+        if copy_file:
+            # 复制模式：生成新ID，复制并重命名文件
+            material_id = self._generate_material_id(file_path)
+            file_ext = Path(file_path).suffix
+            new_filename = f"{material_id}{file_ext}"
+            target_path = os.path.join(target_dir, new_filename)
 
-        # 复制文件
-        shutil.copy2(file_path, target_path)
+            # 复制文件
+            shutil.copy2(file_path, target_path)
+        else:
+            # 原地注册模式：使用文件名作为ID，不复制文件
+            file_path = os.path.abspath(file_path)  # 转为绝对路径
+            material_id = Path(file_path).stem  # 使用原文件名（不含扩展名）作为ID
+            new_filename = Path(file_path).name
+            target_path = file_path  # 文件保持原位
 
         # 获取文件信息
         file_stat = os.stat(target_path)
