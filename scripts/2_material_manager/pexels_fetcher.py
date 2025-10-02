@@ -337,7 +337,8 @@ class PexelsFetcher:
                 self._record_download(material_id, str(filepath), "video")
                 return str(filepath)
 
-            print(f"   ⬇️  下载视频: {filename} ({video_info.get('quality', 'sd').upper()})")
+            quality = video_info.get('quality') or 'sd'
+            print(f"   ⬇️  下载视频: {filename} ({quality.upper()})")
 
             # 下载
             response = requests.get(url, stream=True, timeout=30)

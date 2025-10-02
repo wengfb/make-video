@@ -108,23 +108,39 @@ class AIContentGenerator:
 
         # 调用图片生成
         try:
-            result = self.image_generator.generate_image(
+            results = self.image_generator.generate_image(
                 prompt=enhanced_prompt,
                 size="1024x1024",
                 quality="hd"
             )
 
-            if not result.get('success'):
-                print(f"   ❌ 生成失败: {result.get('error', 'unknown')}")
+            # generate_image返回的是列表
+            if not results or not isinstance(results, list) or len(results) == 0:
+                print(f"   ❌ 生成失败: 未返回有效结果")
                 return None
 
+            # 取第一个结果
+            result = results[0]
+
+            # 保存图片到本地
+            output_dir = 'materials/ai_generated'
+            os.makedirs(output_dir, exist_ok=True)
+
+            timestamp = datetime.now().strftime('%Y%m%d%H%M%S')
+            filename = f"ai_generated_{timestamp}.png"
+            file_path = self.image_generator.save_generated_image(
+                result,
+                output_dir,
+                filename
+            )
+
             # 转换为统一素材格式
-            material_id = f"ai_generated_{datetime.now().strftime('%Y%m%d%H%M%S')}"
+            material_id = f"ai_generated_{timestamp}"
             material_data = {
                 'id': material_id,
                 'name': f"AI生成_{section_name}",
                 'type': 'image',
-                'file_path': result['file_path'],
+                'file_path': file_path,
                 'tags': self._generate_tags_for_ai_content(enhanced_prompt),
                 'description': f"AI生成: {prompt[:100]}",
                 'source': 'ai_generated',
@@ -141,13 +157,15 @@ class AIContentGenerator:
             self.generation_count += 1
             self.total_cost += estimated_cost
 
-            print(f"   ✅ 生成成功: {result['file_path']}")
+            print(f"   ✅ 生成成功: {file_path}")
             print(f"   💰 成本: ¥{estimated_cost:.3f}")
 
             return material_data
 
         except Exception as e:
+            import traceback
             print(f"   ❌ 生成异常: {str(e)}")
+            traceback.print_exc()
             return None
 
     def _generate_video(
