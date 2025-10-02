@@ -142,6 +142,11 @@ def interactive_mode():
         material_mgr = MaterialManager()
         ai_image_gen = AIImageGenerator()
         video_composer = VideoComposer()
+
+        # 智能视频合成器（AI动效）
+        from scripts.3_video_editor.smart_composer import SmartVideoComposer
+        smart_composer = SmartVideoComposer()
+
         tts_generator = TTSGenerator()  # V5.0新增
         tts_manager = TTSManager()      # V5.0新增
         subtitle_generator = SubtitleGenerator()  # V5.0新增
@@ -171,6 +176,7 @@ def interactive_mode():
         print("  10. 素材管理（素材库+AI生成）")
         print("\n🎬 视频合成:")
         print("  11. 从脚本生成视频（自动）")
+        print("  11s. 智能视频合成（AI动效） ⭐ NEW")
         print("  12. 预览素材推荐")
         print("  13. 完整工作流（主题→脚本→视频）")
         print("\n🎙️  语音合成 (V5.0):")
@@ -187,7 +193,7 @@ def interactive_mode():
         print("  0. 退出")
         print("=" * 60)
 
-        choice = input("\n请选择功能 (0-18): ").strip()
+        choice = input("\n请选择功能 (0-18, 11s): ").strip()
 
         if choice == '0':
             print("\n👋 再见！")
@@ -214,6 +220,8 @@ def interactive_mode():
             material_manager_menu(material_mgr, ai_image_gen)
         elif choice == '11':
             compose_video_from_script(video_composer, script_gen)
+        elif choice == '11s':
+            smart_compose_video(smart_composer, script_gen)
         elif choice == '12':
             preview_material_recommendations(video_composer, script_gen)
         elif choice == '13':
@@ -863,6 +871,85 @@ def compose_video_from_script(composer: VideoComposer, script_gen: ScriptGenerat
             auto_select_materials=True
         )
         print(f"\n🎉 视频已生成: {video_path}")
+
+    except Exception as e:
+        print(f"\n❌ 合成失败: {str(e)}")
+        import traceback
+        traceback.print_exc()
+
+
+def smart_compose_video(smart_composer, script_gen: ScriptGenerator):
+    """智能视频合成（AI驱动）"""
+    print("\n" + "-" * 60)
+    print("🧠 智能视频合成 (AI动效)")
+    print("-" * 60)
+
+    # 选择脚本
+    print("\n1. 从最近生成的脚本选择")
+    print("2. 输入脚本文件路径")
+
+    choice = input("\n选择方式 (1-2): ").strip()
+
+    script = None
+
+    if choice == '1':
+        # 查找最近的脚本
+        import glob
+        script_files = glob.glob('output/scripts/*.json')
+        if not script_files:
+            print("\n❌ 未找到脚本文件")
+            return
+
+        script_files.sort(key=os.path.getmtime, reverse=True)
+        print(f"\n找到 {len(script_files[:10])} 个最近的脚本:")
+        for i, file in enumerate(script_files[:10], 1):
+            basename = os.path.basename(file)
+            print(f"  {i}. {basename}")
+
+        file_choice = input(f"\n选择脚本 (1-{min(10, len(script_files))}): ").strip()
+        if file_choice.isdigit():
+            idx = int(file_choice) - 1
+            if 0 <= idx < len(script_files):
+                import json
+                with open(script_files[idx], 'r', encoding='utf-8') as f:
+                    script = json.load(f)
+
+    elif choice == '2':
+        path = input("\n脚本文件路径: ").strip()
+        if os.path.exists(path):
+            import json
+            with open(path, 'r', encoding='utf-8') as f:
+                script = json.load(f)
+        else:
+            print(f"\n❌ 文件不存在: {path}")
+            return
+
+    if not script:
+        print("\n❌ 未选择脚本")
+        return
+
+    # 显示脚本信息
+    print(f"\n📝 脚本: {script.get('title', '未命名')}")
+    print(f"   章节数: {len(script.get('sections', []))}")
+
+    # 智能动效说明
+    print(f"\n✨ 智能动效特性:")
+    print(f"   • AI语义分析 - 理解章节内容")
+    print(f"   • 智能转场选择 - 根据能量和情绪")
+    print(f"   • Ken Burns效果 - 静态图片动态化")
+    print(f"   • 70+规则引擎 - 最佳视觉效果")
+
+    # 确认合成
+    confirm = input("\n开始智能合成? (Y/n): ").strip().lower()
+    if confirm == 'n':
+        return
+
+    try:
+        video_path = smart_composer.compose_from_script(
+            script,
+            auto_select_materials=True
+        )
+        print(f"\n🎉 智能视频已生成: {video_path}")
 
     except Exception as e:
         print(f"\n❌ 合成失败: {str(e)}")

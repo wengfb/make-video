@@ -86,5 +86,19 @@
     "auto_categorize": true,
     "default_category": "uncategorized",
     "max_file_size_mb": 100
+  },
+
+  "smart_effects": {
+    "enable": true,
+    "use_ai_analysis": false,
+    "fallback_to_rules": true,
+    "ken_burns_enabled": true,
+    "transition_intensity": "auto",
+    "energy_threshold": {
+      "high": 7.5,
+      "medium": 5.0,
+      "low": 3.0
+    },
+    "description": "智能动效系统配置 - AI驱动的转场和动画"
   }
 }
