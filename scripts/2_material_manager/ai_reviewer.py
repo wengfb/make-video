@@ -115,7 +115,8 @@ class MaterialReviewerAI:
 
         # 判断是否需要生成新素材
         need_generation = review_result.get('need_custom_generation', False)
-        generation_prompt = review_result.get('generation_requirements', '')
+        # 注意：AI prompt中使用的是generation_requirements
+        generation_prompt = review_result.get('generation_requirements', '') or review_result.get('generation_prompt', '')
 
         # 打印审核结果
         print(f"   📊 审核结果: {len(approved)}个合格, {len(rejected)}个不合格")
@@ -226,6 +227,18 @@ class MaterialReviewerAI:
 
         # 调用AI
         result = self.ai_client.generate_json(review_prompt)
+
+        # 验证返回格式
+        if not isinstance(result, dict):
+            print(f"   ⚠️  AI返回格式异常（期望dict，实际{type(result).__name__}），降级处理")
+            return {
+                'reviews': [],
+                'best_material_index': -1,
+                'need_custom_generation': False,
+                'generation_requirements': '',
+                'summary': 'AI返回格式错误'
+            }
+
         return result
 
     def _format_materials_for_review(self, materials: List[Dict[str, Any]]) -> str:

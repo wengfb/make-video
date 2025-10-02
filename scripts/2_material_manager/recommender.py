@@ -246,29 +246,33 @@ class MaterialRecommender:
                     return approved
 
                 # 无合格素材，尝试AI生成
-                if review_result['need_generation'] and self.ai_generator:
-                    print(f"\n   🎨 现有素材不符合要求，尝试AI生成...")
-                    generated = self.ai_generator.generate_material(
-                        script_section,
-                        review_result['generation_prompt']
-                    )
+                if review_result.get('need_generation', False) and self.ai_generator:
+                    generation_prompt = review_result.get('generation_prompt', '')
+                    if not generation_prompt:
+                        print(f"   ⚠️  无生成提示词，跳过AI生成")
+                    else:
+                        print(f"\n   🎨 现有素材不符合要求，尝试AI生成...")
+                        generated = self.ai_generator.generate_material(
+                            script_section,
+                            generation_prompt
+                        )
 
-                    if generated:
-                        # 将生成的素材添加到素材库
-                        try:
-                            self.material_manager.add_material(
-                                name=generated['name'],
-                                file_path=generated['file_path'],
-                                material_type=generated['type'],
-                                tags=generated['tags'],
-                                description=generated['description']
-                            )
-                            print(f"   ✅ AI生成的素材已添加到素材库")
-                        except Exception as e:
-                            print(f"   ⚠️  添加到素材库失败: {str(e)}")
+                        if generated:
+                            # 将生成的素材添加到素材库
+                            try:
+                                self.material_manager.add_material(
+                                    name=generated['name'],
+                                    file_path=generated['file_path'],
+                                    material_type=generated['type'],
+                                    tags=generated['tags'],
+                                    description=generated['description']
+                                )
+                                print(f"   ✅ AI生成的素材已添加到素材库")
+                            except Exception as e:
+                                print(f"   ⚠️  添加到素材库失败: {str(e)}")
 
-                        # 返回生成的素材
-                        return [generated]
+                            # 返回生成的素材
+                            return [generated]
 
             except Exception as e:
                 print(f"   ⚠️  AI审核/生成失败: {str(e)}")
