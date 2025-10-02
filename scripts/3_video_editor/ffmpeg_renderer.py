@@ -358,7 +358,7 @@ class FFmpegTimelineRenderer:
             f"PrimaryColour={primary_color}",
             f"BackColour={back_color_with_alpha}",
             "Alignment=2",  # 底部居中
-            "MarginV=50",   # 垂直边距
+            "MarginV=20",   # 垂直边距（离底部的距离，像素）
         ]
 
         force_style = ",".join(force_style_parts)
