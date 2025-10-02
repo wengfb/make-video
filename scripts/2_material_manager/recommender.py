@@ -157,6 +157,16 @@ class MaterialRecommender:
             # if len(unique_materials) < limit:
             #     print("       💰 可选: 使用DALL-E生成 (需手动触发)")
 
+        # V5.4修复: 确保所有素材都有match_score和match_reason
+        # 外部素材（Pexels/Unsplash）需要重新评分
+        for material in unique_materials:
+            if 'match_score' not in material or 'match_reason' not in material:
+                material['match_score'] = self._calculate_match_score(material, material_requirements)
+                material['match_reason'] = self._generate_match_reason(material, material_requirements)
+
+        # 重新排序（外部素材可能评分更高）
+        unique_materials.sort(key=lambda x: x.get('match_score', 0), reverse=True)
+
         return unique_materials[:limit]
 
     def recommend_for_full_script(
@@ -271,7 +281,7 @@ class MaterialRecommender:
         visual_notes: str
     ) -> Dict[str, Any]:
         """
-        分析素材需求
+        分析素材需求（V5.4增强：多维度分析）
 
         Args:
             narration: 旁白文本
@@ -283,17 +293,33 @@ class MaterialRecommender:
         # 使用AI分析（可选，也可以用简单的关键词提取）
         try:
             prompt = f"""
-分析以下视频内容需要什么类型的素材：
+分析以下科普视频场景需要什么素材，并提取多维度关键词。
 
 旁白: {narration[:200]}
 视觉提示: {visual_notes}
 
-请以JSON格式输出:
+请以JSON格式输出（优先推荐视频素材）:
 {{
-  "material_types": ["image", "video", "animation"],
-  "keywords": ["关键词1", "关键词2"],
-  "tags": ["标签1", "标签2"],
-  "description": "素材需求描述"
+  "material_types": ["video", "image", "animation"],  // 按优先级排序，优先推荐video
+  "keywords": ["主体对象", "场景类型", "动作/状态"],  // 3-5个关键词
+  "tags": ["科学领域", "视觉风格"],  // 2-3个标签
+  "visual_elements": ["具体视觉元素1", "元素2"],  // 需要展示的具体元素
+  "scene_type": "微观/宏观/抽象/实景",  // 场景类型
+  "mood": "科技感/神秘/温暖/紧张",  // 情感氛围
+  "description": "一句话总结素材需求"
+}}
+
+示例:
+输入: 旁白="DNA双螺旋结构存储着生命的秘密", 视觉="显示DNA分子结构旋转动画"
+输出:
+{{
+  "material_types": ["video", "animation"],
+  "keywords": ["DNA", "双螺旋", "分子结构", "旋转"],
+  "tags": ["生物学", "微观", "科技"],
+  "visual_elements": ["DNA模型", "螺旋动画", "分子"],
+  "scene_type": "微观",
+  "mood": "科技感",
+  "description": "DNA双螺旋结构的微观动画"
 }}
 """
             result = self.ai_client.generate_json(prompt)
@@ -303,9 +329,12 @@ class MaterialRecommender:
             # 降级到简单关键词提取
             keywords = self._extract_keywords(narration + ' ' + visual_notes)
             return {
-                'material_types': ['image'],
+                'material_types': ['video', 'image'],  # V5.4: 优先视频
                 'keywords': keywords,
                 'tags': keywords,
+                'visual_elements': keywords[:2],
+                'scene_type': 'unknown',
+                'mood': 'neutral',
                 'description': visual_notes or narration[:100]
             }
 
@@ -340,7 +369,7 @@ class MaterialRecommender:
         requirements: Dict[str, Any]
     ) -> List[Dict[str, Any]]:
         """
-        去重并评分排序
+        去重并评分排序（V5.4增强：添加匹配原因）
 
         Args:
             materials: 素材列表
@@ -362,12 +391,74 @@ class MaterialRecommender:
                 score = self._calculate_match_score(material, requirements)
                 material['match_score'] = score
 
+                # V5.4: 生成匹配原因
+                material['match_reason'] = self._generate_match_reason(material, requirements)
+
                 unique_materials.append(material)
 
         # 按匹配分数排序
         unique_materials.sort(key=lambda x: x.get('match_score', 0), reverse=True)
 
         return unique_materials
+
+    def _generate_match_reason(
+        self,
+        material: Dict[str, Any],
+        requirements: Dict[str, Any]
+    ) -> str:
+        """
+        生成素材匹配原因说明（V5.4新增）
+
+        Args:
+            material: 素材数据
+            requirements: 需求数据
+
+        Returns:
+            匹配原因文本
+        """
+        reasons = []
+
+        # 类型匹配
+        material_type = material.get('type', '')
+        if material_type == 'video':
+            reasons.append("视频素材")
+        elif material_type == 'image':
+            reasons.append("图片素材")
+
+        # 标签匹配
+        material_tags = set(material.get('tags', []))
+        required_tags = set(requirements.get('tags', []))
+        common_tags = material_tags & required_tags
+        if common_tags:
+            reasons.append(f"标签匹配: {', '.join(list(common_tags)[:2])}")
+
+        # 关键词匹配
+        material_text = (
+            material.get('name', '') + ' ' +
+            material.get('description', '') + ' ' +
+            ' '.join(material.get('tags', []))
+        ).lower()
+
+        keywords = requirements.get('keywords', [])
+        matched_keywords = [kw for kw in keywords if kw.lower() in material_text]
+        if matched_keywords:
+            reasons.append(f"关键词: {', '.join(matched_keywords[:2])}")
+
+        # 来源说明
+        source = material.get('source', '')
+        if source == 'pexels':
+            reasons.append("Pexels高质量")
+        elif source == 'unsplash':
+            reasons.append("Unsplash高质量")
+
+        # 使用历史
+        used_count = material.get('used_count', 0)
+        if used_count == 0:
+            reasons.append("新素材")
+        elif used_count > 5:
+            reasons.append(f"已用{used_count}次")
+
+        return " | ".join(reasons) if reasons else "基础匹配"
 
     def _calculate_match_score(
         self,
@@ -376,7 +467,7 @@ class MaterialRecommender:
     ) -> float:
         """
         计算素材与需求的匹配分数
-        V5.3: 优化评分算法
+        V5.4: 增强评分算法 - 支持多维度分析
 
         Args:
             material: 素材数据
@@ -387,46 +478,66 @@ class MaterialRecommender:
         """
         score = 0.0
 
-        # ✨ V5.3: 类型匹配 (提高视频权重)
+        # ✨ V5.4: 类型匹配（视频素材优先，权重40分）
         material_type = material.get('type')
         required_types = requirements.get('material_types', [])
 
         if material_type == 'video':
-            score += 50  # 视频素材优先 (从30→50)
+            # 视频在第一优先级：40分
+            if required_types and required_types[0] == 'video':
+                score += 40
+            else:
+                score += 30  # 即使不是首选，视频也有高分
         elif material_type in required_types:
-            score += 30
+            # 其他匹配类型：20-30分
+            type_index = required_types.index(material_type)
+            score += max(20, 30 - type_index * 5)
 
-        # ✨ V5.3: 标签匹配 (提高权重)
+        # ✨ V5.4: 标签匹配（权重35分）
         material_tags = set(material.get('tags', []))
         required_tags = set(requirements.get('tags', []))
         tag_overlap = len(material_tags & required_tags)
         if tag_overlap > 0:
-            score += min(tag_overlap * 15, 40)  # 从30→40
+            score += min(tag_overlap * 12, 35)
 
-        # ✨ V5.3: 关键词匹配 (支持部分匹配)
+        # ✨ V5.4: 关键词匹配（权重25分）
         material_text = (
             material.get('name', '') + ' ' +
             material.get('description', '') + ' ' +
             ' '.join(material.get('tags', []))
         ).lower()
 
+        # 关键词匹配
         keywords = requirements.get('keywords', [])
         keyword_score = 0
         for keyword in keywords:
-            # 支持多词关键词的部分匹配
             keyword_parts = keyword.lower().split()
             matches = sum(1 for part in keyword_parts if part in material_text)
             if matches > 0:
-                keyword_score += min(matches * 8, 20)
+                keyword_score += min(matches * 8, 15)
+        score += min(keyword_score, 25)
 
-        score += min(keyword_score, 30)
+        # ✨ V5.4: 视觉元素匹配（新增，权重20分）
+        visual_elements = requirements.get('visual_elements', [])
+        if visual_elements:
+            element_score = 0
+            for element in visual_elements:
+                if element.lower() in material_text:
+                    element_score += 10
+            score += min(element_score, 20)
 
-        # 评分加成
+        # ✨ V5.4: 场景类型匹配（新增，权重10分）
+        scene_type = requirements.get('scene_type', '').lower()
+        if scene_type and scene_type != 'unknown':
+            if scene_type in material_text:
+                score += 10
+
+        # 评分加成（权重10分）
         rating = material.get('rating')
         if rating:
             score += rating * 2
 
-        # ✨ V5.3: 使用历史惩罚 (避免重复)
+        # ✨ V5.4: 使用历史（权重-15到+5分）
         used_count = material.get('used_count', 0)
         if used_count == 0:
             score += 5  # 新素材加分
@@ -434,6 +545,13 @@ class MaterialRecommender:
             score += 2  # 少用素材小加分
         elif used_count > 5:
             score -= min((used_count - 5) * 3, 15)  # 用太多次减分
+
+        # ✨ V5.4: 来源加成（Pexels/Unsplash高质量素材）
+        source = material.get('source', '')
+        if source == 'pexels' and material_type == 'video':
+            score += 5  # Pexels视频质量高
+        elif source == 'unsplash':
+            score += 3  # Unsplash图片质量高
 
         return max(0, min(score, 100))
 

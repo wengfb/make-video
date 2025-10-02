@@ -135,18 +135,39 @@ class VideoComposer:
         self,
         sections: List[Dict[str, Any]],
         section_materials: Dict[int, Tuple[Optional[str], Optional[Dict[str, Any]]]],
+        tts_durations: Optional[List[float]] = None,
     ) -> List[SegmentSpec]:
+        """
+        构建视频片段列表
+
+        Args:
+            sections: 脚本章节列表
+            section_materials: 章节素材映射
+            tts_durations: TTS音频时长列表（优先使用，如果提供）
+
+        Returns:
+            视频片段列表
+        """
         segments: List[SegmentSpec] = []
         text_enabled = self.video_config.get('show_narration_text', True)
         text_style = self._get_text_style()
 
+        # V5.4: 是否使用TTS时长（配置项）
+        use_tts_duration = self.video_config.get('use_tts_duration', True)
+
         for idx, section in enumerate(sections):
             section_name = section.get('section_name', f'章节{idx + 1}')
             narration = section.get('narration', '')
-            duration = self._parse_duration(
-                section.get('duration', self.default_image_duration),
-                default=self.default_image_duration
-            )
+
+            # V5.4: 优先使用TTS实际时长，确保音画同步
+            if use_tts_duration and tts_durations and idx < len(tts_durations):
+                duration = tts_durations[idx]
+                print(f"   🎙️  章节 {idx + 1} 使用TTS时长: {duration:.2f}秒")
+            else:
+                duration = self._parse_duration(
+                    section.get('duration', self.default_image_duration),
+                    default=self.default_image_duration
+                )
 
             material_path = None
             material_info = None
@@ -273,9 +294,29 @@ class VideoComposer:
         tts_metadata_path: Optional[str],
         subtitle_file: Optional[str] = None,
     ) -> Tuple[float, int]:
+        # V5.4: 提取TTS时长列表（如果有）
+        tts_durations = None
+        if use_tts_audio and tts_metadata_path and os.path.exists(tts_metadata_path):
+            try:
+                with open(tts_metadata_path, 'r', encoding='utf-8') as f:
+                    metadata = json.load(f)
+                audio_items = metadata.get('audio_files', [])
+                tts_durations = [
+                    float(item.get('duration', 0.0) or 0.0)
+                    for item in audio_items
+                    if item.get('file_path') and os.path.exists(item.get('file_path'))
+                ]
+                if tts_durations:
+                    print(f"   📊 已加载 {len(tts_durations)} 段TTS时长数据")
+            except (OSError, json.JSONDecodeError) as exc:
+                print(f"   ⚠️  无法读取TTS元数据: {exc}")
+                tts_durations = None
+
+        # 构建视频片段（使用TTS时长）
         segments = self._build_segments(
             sections=sections,
             section_materials=section_materials,
+            tts_durations=tts_durations,
         )
 
         if not segments:
@@ -288,10 +329,13 @@ class VideoComposer:
             video_duration=total_duration,
         )
 
+        # V5.4: 由于已经使用TTS时长构建片段，不再需要调整最后一个片段
+        # 只在极端情况下（误差>1秒）才调整
         if audio_plan and audio_plan.use_tts:
             audio_total = sum(audio_plan.tts_durations)
             diff = audio_total - total_duration
-            if abs(diff) > 0.1:
+            if abs(diff) > 1.0:  # 从0.1改为1.0，只在有明显误差时才调整
+                print(f"   ⚠️  视频总时长与音频不匹配（差异 {diff:.2f}秒），调整最后片段")
                 last_segment = segments[-1]
                 adjusted_duration = max(0.5, last_segment.duration + diff)
                 segments[-1] = replace(last_segment, duration=adjusted_duration)
@@ -422,7 +466,7 @@ class VideoComposer:
 
     def preview_material_recommendations(self, script: Dict[str, Any]) -> List[Dict[str, Any]]:
         """
-        预览脚本各章节的素材推荐
+        预览脚本各章节的素材推荐（V5.4增强：详细展示匹配信息）
 
         Args:
             script: 脚本字典
@@ -434,11 +478,17 @@ class VideoComposer:
         all_recommendations = []
 
         print(f"\n🔍 素材推荐预览: {script.get('title', '未命名')}")
-        print("=" * 60)
+        print("=" * 80)
 
         for i, section in enumerate(sections, 1):
             section_name = section.get('section_name', f'章节{i}')
-            print(f"\n{i}. {section_name}")
+            narration = section.get('narration', '')[:60]
+            visual_notes = section.get('visual_notes', '')
+
+            print(f"\n📌 {i}. {section_name}")
+            print(f"   旁白: {narration}...")
+            if visual_notes:
+                print(f"   视觉: {visual_notes[:60]}...")
 
             recommendations = self.recommender.recommend_for_script_section(
                 section,
@@ -446,10 +496,24 @@ class VideoComposer:
             )
 
             if recommendations:
+                print(f"\n   💎 找到 {len(recommendations)} 个候选素材:")
                 for j, rec in enumerate(recommendations, 1):
-                    print(f"   {j}) {rec['name']} (匹配度: {rec['match_score']:.0f}%)")
-                    print(f"      类型: {rec['type']} | 标签: {', '.join(rec.get('tags', []))}")
-                    print(f"      原因: {rec.get('match_reason', 'N/A')}")
+                    # V5.4: 增强显示格式
+                    marker = "⭐" if j == 1 else "  "
+                    type_icon = "🎥" if rec['type'] == 'video' else "🖼️"
+                    print(f"   {marker} {j}) {type_icon} {rec['name']}")
+                    print(f"      📊 匹配度: {rec['match_score']:.0f}% | 类型: {rec['type']}")
+                    print(f"      🏷️  标签: {', '.join(rec.get('tags', [])[:3])}")
+                    print(f"      ✨ 原因: {rec.get('match_reason', 'N/A')}")
+
+                    # 显示文件路径（简化）
+                    file_path = rec.get('file_path', '')
+                    if file_path:
+                        file_name = os.path.basename(file_path)
+                        print(f"      📁 文件: {file_name}")
+
+                    if j < len(recommendations):
+                        print()  # 素材间空行
             else:
                 print("   ⚠️  未找到合适素材")
 
@@ -458,6 +522,9 @@ class VideoComposer:
                 'section_name': section_name,
                 'recommendations': recommendations
             })
+
+        print("\n" + "=" * 80)
+        print(f"💡 提示: ⭐标记的素材将被自动选择用于视频合成")
 
         return all_recommendations
 

@@ -233,7 +233,21 @@ class FFmpegTimelineRenderer:
                 ]
             )
 
-        chain.append(f"trim=duration={segment.duration:.6f}")
+        # V5.4: 智能剪辑 - 对于过长的视频素材，从中间部分开始截取
+        if segment.source_type == "video" and segment.source_path:
+            source_duration = self._probe_duration(segment.source_path)
+            if source_duration and source_duration > segment.duration * 1.5:
+                # 视频明显过长，从中间开始截取（更可能有精彩内容）
+                start_time = (source_duration - segment.duration) / 2.0
+                start_time = max(0, start_time)  # 确保不为负
+                chain.append(f"trim=start={start_time:.6f}:duration={segment.duration:.6f}")
+            else:
+                # 视频长度接近或短于目标，从头开始
+                chain.append(f"trim=duration={segment.duration:.6f}")
+        else:
+            # 图片或其他类型，直接trim
+            chain.append(f"trim=duration={segment.duration:.6f}")
+
         chain.append("setpts=PTS-STARTPTS")
         chain.append(f"fps={fps}")
 
