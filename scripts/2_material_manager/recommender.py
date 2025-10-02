@@ -376,6 +376,7 @@ class MaterialRecommender:
     ) -> float:
         """
         计算素材与需求的匹配分数
+        V5.3: 优化评分算法
 
         Args:
             material: 素材数据
@@ -386,49 +387,62 @@ class MaterialRecommender:
         """
         score = 0.0
 
-        # 类型匹配
+        # ✨ V5.3: 类型匹配 (提高视频权重)
+        material_type = material.get('type')
         required_types = requirements.get('material_types', [])
-        if material.get('type') in required_types:
+
+        if material_type == 'video':
+            score += 50  # 视频素材优先 (从30→50)
+        elif material_type in required_types:
             score += 30
 
-        # 标签匹配
+        # ✨ V5.3: 标签匹配 (提高权重)
         material_tags = set(material.get('tags', []))
         required_tags = set(requirements.get('tags', []))
         tag_overlap = len(material_tags & required_tags)
         if tag_overlap > 0:
-            score += min(tag_overlap * 10, 30)
+            score += min(tag_overlap * 15, 40)  # 从30→40
 
-        # 关键词匹配
-        material_text = (material.get('name', '') + ' ' +
-                        material.get('description', '') + ' ' +
-                        ' '.join(material.get('tags', []))).lower()
+        # ✨ V5.3: 关键词匹配 (支持部分匹配)
+        material_text = (
+            material.get('name', '') + ' ' +
+            material.get('description', '') + ' ' +
+            ' '.join(material.get('tags', []))
+        ).lower()
 
         keywords = requirements.get('keywords', [])
-        keyword_matches = sum(1 for kw in keywords if kw.lower() in material_text)
-        if keyword_matches > 0:
-            score += min(keyword_matches * 10, 30)
+        keyword_score = 0
+        for keyword in keywords:
+            # 支持多词关键词的部分匹配
+            keyword_parts = keyword.lower().split()
+            matches = sum(1 for part in keyword_parts if part in material_text)
+            if matches > 0:
+                keyword_score += min(matches * 8, 20)
+
+        score += min(keyword_score, 30)
 
         # 评分加成
         rating = material.get('rating')
         if rating:
             score += rating * 2
 
-        # 使用次数（适度加成，避免总是推荐相同素材）
+        # ✨ V5.3: 使用历史惩罚 (避免重复)
         used_count = material.get('used_count', 0)
-        if used_count > 0:
-            score += min(used_count, 10)
+        if used_count == 0:
+            score += 5  # 新素材加分
+        elif used_count <= 2:
+            score += 2  # 少用素材小加分
+        elif used_count > 5:
+            score -= min((used_count - 5) * 3, 15)  # 用太多次减分
 
-        # ⭐ V5.1: 视频素材优先 +50分
-        if material.get('type') == 'video':
-            score += 50
-
-        return min(score, 100)
+        return max(0, min(score, 100))
 
     # ===== V5.1 新增: 外部素材获取方法 =====
 
     def _extract_english_keyword(self, narration: str, visual_notes: str) -> str:
         """
         提取英文关键词(用于Pexels/Unsplash搜索)
+        V5.3: 添加AI智能提取 + 多关键词匹配 + 详细日志
 
         Args:
             narration: 旁白文本
@@ -439,6 +453,16 @@ class MaterialRecommender:
         """
         # 优先使用visual_notes
         text = visual_notes if visual_notes else narration
+
+        print(f"\n   🔍 关键词提取分析:")
+        print(f"      输入源: {'visual_notes' if visual_notes else 'narration'}")
+        print(f"      文本: {text[:120]}{'...' if len(text) > 120 else ''}")
+
+        # ✨ V5.3 新增: AI智能提取 (优先级最高)
+        ai_keyword = self._ai_extract_keyword(text, narration)
+        if ai_keyword:
+            print(f"      ✓ AI提取: '{ai_keyword}'")
+            return ai_keyword
 
         # 简单映射(中文 → 英文科普关键词)
         # ✨ V5.2 扩展: 添加更多气候和科学相关关键词
@@ -514,16 +538,115 @@ class MaterialRecommender:
             # 能源
             '能源': 'energy renewable',
             '核能': 'nuclear energy',
-            '电池': 'battery energy storage'
+            '电池': 'battery energy storage',
+
+            # ✨ V5.3 新增: 视觉元素和动作
+            '温度计': 'thermometer temperature',
+            '温度': 'temperature',
+            '温度上升': 'rising temperature',
+            '上升': 'rising increase',
+            '下降': 'falling decrease',
+            '发烧': 'fever heat warming',
+            '汽车': 'car vehicle',
+            '阳光': 'sunlight solar',
+            '玻璃': 'glass transparent',
+            '大气层': 'atmosphere',
+            '大气': 'atmosphere air',
+            '辐射': 'radiation',
+            '融化': 'melting ice',
+            '蒸发': 'evaporation',
+            '循环': 'cycle circulation',
+            '动画': 'animation motion',
+            '图表': 'chart graph data',
+            '曲线': 'curve line graph',
+            '数据': 'data statistics',
+            '对比': 'comparison before after',
+            '变化': 'change transformation',
+            '过程': 'process',
+            '实验': 'experiment science',
+            '显微镜': 'microscope',
+            '望远镜': 'telescope'
         }
 
-        # 查找匹配
+        # ✨ V5.3 改进: 多关键词匹配 (收集所有匹配)
+        matched_keywords = []
         for cn_keyword, en_keyword in keyword_map.items():
             if cn_keyword in text:
-                return en_keyword
+                # 记录: (中文词, 英文词, 词长度, 在文本中的位置)
+                position = text.index(cn_keyword)
+                matched_keywords.append({
+                    'cn': cn_keyword,
+                    'en': en_keyword,
+                    'len': len(cn_keyword),
+                    'pos': position
+                })
+
+        if matched_keywords:
+            # 按关键词长度排序 (优先匹配更具体的长词)
+            matched_keywords.sort(key=lambda x: x['len'], reverse=True)
+
+            # 日志显示所有匹配
+            print(f"      匹配词: {', '.join([f'{m['cn']}→{m['en']}' for m in matched_keywords[:5]])}")
+
+            # 组合前2个最相关的关键词
+            top_matches = matched_keywords[:2]
+            combined_keyword = ' '.join([m['en'] for m in top_matches])
+
+            print(f"      ✓ 映射表提取: '{combined_keyword}'")
+            return combined_keyword
 
         # 默认: 通用科普关键词
+        print(f"      ⚠️  无匹配，使用默认: 'science education'")
         return 'science education'
+
+    def _ai_extract_keyword(self, visual_notes: str, narration: str) -> Optional[str]:
+        """
+        使用AI智能提取英文关键词
+        V5.3新增
+
+        Args:
+            visual_notes: 视觉提示
+            narration: 旁白文本
+
+        Returns:
+            英文关键词或None
+        """
+        try:
+            prompt = f"""分析以下科普视频视觉需求,提取最相关的Pexels/Unsplash搜索关键词。
+
+视觉提示: {visual_notes[:200]}
+旁白: {narration[:100]}
+
+要求:
+1. 提取1-3个最相关的英文关键词
+2. 优先提取具体的视觉元素(如动画、场景、物体)
+3. 关键词要适合在免费素材库搜索
+4. 只返回关键词,不要其他内容
+
+示例:
+输入: "显示地球温度计动画，温度不断上升"
+输出: earth temperature rising animation
+
+输入: "汽车在阳光下，车内温度上升"
+输出: car greenhouse effect sunlight
+
+输入: "展示全球温度变化曲线"
+输出: global temperature chart rising
+
+现在请提取关键词:"""
+
+            result = self.ai_client.generate_text(prompt).strip()
+
+            # 验证结果
+            if result and len(result) < 100 and not any(c in result for c in ['。', '，', '\n']):
+                return result
+            else:
+                print(f"      ⚠️  AI返回格式异常: {result[:50]}")
+                return None
+
+        except Exception as e:
+            print(f"      ⚠️  AI提取失败: {str(e)}")
+            return None
 
     def _fetch_from_pexels_videos(self, keyword: str, count: int = 3) -> List[Dict[str, Any]]:
         """

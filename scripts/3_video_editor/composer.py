@@ -87,7 +87,8 @@ class VideoComposer:
 
         # 遍历每个章节
         for i, section in enumerate(sections, 1):
-            print(f"\n📝 处理章节 {i}/{len(sections)}: {section.get('section_name', f'章节{i}')}")
+            print(f"\n{'='*70}")
+            print(f"📝 章节 {i}/{len(sections)}: {section.get('section_name', f'章节{i}')}")
 
             # 获取章节信息
             narration = section.get('narration', '')
@@ -97,20 +98,34 @@ class VideoComposer:
                 default=self.default_image_duration
             )
 
+            # V5.3: 显示章节内容详情
+            print(f"   时长: {duration}秒")
+            print(f"   旁白: {narration[:100]}{'...' if len(narration) > 100 else ''}")
+            print(f"   视觉: {visual_notes[:100]}{'...' if len(visual_notes) > 100 else ''}")
+
             # 推荐素材
             if auto_select_materials:
-                print("   🔍 智能推荐素材...")
+                print("\n   🔍 智能推荐素材...")
                 recommendations = self.recommender.recommend_for_script_section(
                     section,
                     limit=3
                 )
 
                 if recommendations:
+                    # V5.3: 显示所有推荐素材
+                    print(f"\n   🎯 推荐结果 (共{len(recommendations)}个):")
+                    for idx, rec in enumerate(recommendations, 1):
+                        print(f"      {idx}. {rec['name']}")
+                        print(f"         类型: {rec['type']} | 匹配度: {rec['match_score']:.0f}% | 来源: {rec.get('source', 'local')}")
+                        print(f"         标签: {', '.join(rec.get('tags', [])[:5])}")
+                        if idx >= 3:
+                            break
+
                     best_material = recommendations[0]
                     material_path = best_material['file_path']
-                    print(f"   ✅ 选择素材: {best_material['name']} (匹配度: {best_material['match_score']:.0f}%)")
+                    print(f"\n   ✅ 最终选择: {best_material['name']} (匹配度: {best_material['match_score']:.0f}%)")
                 else:
-                    print("   ⚠️  未找到合适素材，使用默认黑屏")
+                    print("\n   ❌ 未找到合适素材，使用默认黑屏")
                     material_path = None
             else:
                 material_path = None
