@@ -180,9 +180,9 @@ class AIClient:
             'max_tokens': self.max_tokens
         }
 
-        # 重试机制：最多3次，指数退避
+        # 重试机制：最多3次，指数退避（针对GLM限流优化延迟时间）
         max_retries = 3
-        retry_delays = [1, 2, 4]  # 秒
+        retry_delays = [3, 6, 12]  # 秒（比OpenAI更长，应对429限流）
 
         for attempt in range(max_retries):
             try:
@@ -223,8 +223,13 @@ class AIClient:
                 if e.response.status_code in [429, 500, 502, 503, 504]:
                     # 限流或服务器错误，可重试
                     if attempt < max_retries - 1:
-                        delay = retry_delays[attempt]
-                        print(f"\n⚠️  GLM API错误 ({e.response.status_code})，{delay}秒后重试 ({attempt + 1}/{max_retries})...")
+                        # 429限流需要更长的等待时间
+                        if e.response.status_code == 429:
+                            delay = retry_delays[attempt] * 2  # 429双倍等待
+                            print(f"\n⚠️  GLM API限流(429)，{delay}秒后重试 ({attempt + 1}/{max_retries})...")
+                        else:
+                            delay = retry_delays[attempt]
+                            print(f"\n⚠️  GLM API错误 ({e.response.status_code})，{delay}秒后重试 ({attempt + 1}/{max_retries})...")
                         time.sleep(delay)
                     else:
                         raise Exception(f"GLM API调用失败（已重试{max_retries}次）: {str(e)}")

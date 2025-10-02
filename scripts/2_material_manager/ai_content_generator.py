@@ -106,8 +106,11 @@ class AIContentGenerator:
             print(f"   ⚠️  预算不足，跳过生成")
             return None
 
-        # 调用图片生成
+        # 调用图片生成（添加请求间隔避免限流）
         try:
+            import time
+            time.sleep(0.5)  # 500ms延迟，避免连续请求触发429
+
             results = self.image_generator.generate_image(
                 prompt=enhanced_prompt,
                 size="1024x1024",

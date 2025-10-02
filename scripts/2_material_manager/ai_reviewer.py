@@ -225,7 +225,10 @@ class MaterialReviewerAI:
 请开始审核:
 """
 
-        # 调用AI
+        # 调用AI（添加请求间隔避免限流）
+        import time
+        time.sleep(0.5)  # 500ms延迟，避免连续请求触发429
+
         result = self.ai_client.generate_json(review_prompt)
 
         # 验证返回格式
