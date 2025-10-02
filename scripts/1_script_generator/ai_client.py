@@ -75,8 +75,12 @@ class AIClient:
 
         for attempt in range(max_retries):
             try:
+                # 确保URL正确拼接（去除base_url末尾的斜杠）
+                base = self.base_url.rstrip('/')
+                url = f'{base}/chat/completions'
+
                 response = requests.post(
-                    f'{self.base_url}/chat/completions',
+                    url,
                     headers=headers,
                     json=data,
                     timeout=60
@@ -182,11 +186,15 @@ class AIClient:
 
         for attempt in range(max_retries):
             try:
+                # 确保URL正确拼接（去除base_url末尾的斜杠）
+                base = self.base_url.rstrip('/')
+                url = f'{base}/chat/completions'
+
                 response = requests.post(
-                    f'{self.base_url}/chat/completions',
+                    url,
                     headers=headers,
                     json=data,
-                    timeout=60
+                    timeout=120  # GLM需要更长的超时时间（特别是复杂prompt）
                 )
                 response.raise_for_status()
                 result = response.json()
