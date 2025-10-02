@@ -644,9 +644,9 @@ class MaterialRecommender:
 1. 提取1-3个最相关的英文关键词
 2. 优先提取具体的视觉元素(如动画、场景、物体)
 3. 关键词要适合在免费素材库搜索
-4. 只返回关键词,不要其他内容
+4. **只返回一行关键词，用空格分隔，不要换行或其他内容**
 
-示例:
+示例格式（重要！）:
 输入: "显示地球温度计动画，温度不断上升"
 输出: earth temperature rising animation
 
@@ -656,12 +656,34 @@ class MaterialRecommender:
 输入: "展示全球温度变化曲线"
 输出: global temperature chart rising
 
-现在请提取关键词:"""
+现在请提取关键词（单行输出）:"""
 
             result = self.ai_client.generate(prompt).strip()
 
-            # 验证结果
-            if result and len(result) < 100 and not any(c in result for c in ['。', '，', '\n']):
+            # 清洗和验证结果
+            if not result:
+                return None
+
+            # 移除中文标点
+            result = result.replace('。', ' ').replace('，', ' ').replace(',', ' ')
+
+            # 处理多行：如果有换行，取第一个非空行或合并所有行
+            if '\n' in result:
+                lines = [line.strip() for line in result.split('\n') if line.strip()]
+                if lines:
+                    # 如果第一行看起来是完整的关键词，使用第一行
+                    first_line = lines[0]
+                    if len(first_line) < 100 and ' ' in first_line:
+                        result = first_line
+                        print(f"      ℹ️  AI返回多行，已取第一行: {result}")
+                    else:
+                        # 否则合并所有行
+                        result = ' '.join(lines)
+                        print(f"      ℹ️  AI返回多行，已合并: {result[:50]}")
+
+            # 最终验证
+            result = ' '.join(result.split())  # 标准化空格
+            if result and len(result) < 150 and not any(c in result for c in ['。', '，', '：', ':']):
                 return result
             else:
                 print(f"      ⚠️  AI返回格式异常: {result[:50]}")
