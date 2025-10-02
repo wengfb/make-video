@@ -6,8 +6,11 @@
 import json
 import os
 import sys
-from typing import Dict, Any, List, Optional, Tuple
+from dataclasses import replace
 from datetime import datetime
+from typing import Any, Dict, List, Optional, Tuple
+from concurrent.futures import ThreadPoolExecutor, as_completed
+import threading
 
 # 修复相对导入问题 - 导入VideoEditor
 sys.path.insert(0, os.path.dirname(__file__))
@@ -17,6 +20,13 @@ from editor import VideoEditor
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '2_material_manager'))
 from recommender import MaterialRecommender
 from manager import MaterialManager
+
+from ffmpeg_renderer import (
+    AudioPlan,
+    FFmpegRenderError,
+    FFmpegTimelineRenderer,
+    SegmentSpec,
+)
 
 
 class VideoComposer:
@@ -63,16 +73,6 @@ class VideoComposer:
         Returns:
             视频文件路径
         """
-        if not self.editor.moviepy_available:
-            raise ImportError("moviepy未安装。请运行: pip install moviepy")
-
-        from moviepy import (
-            ImageClip, VideoFileClip, TextClip, CompositeVideoClip,
-            concatenate_videoclips, AudioFileClip
-        )
-        from moviepy.video.fx import Loop
-        from moviepy.audio.fx import AudioLoop
-
         print(f"\n🎬 开始合成视频: {script.get('title', '未命名')}")
         print("=" * 60)
 
@@ -80,196 +80,30 @@ class VideoComposer:
         if not sections:
             raise ValueError("脚本没有章节内容")
 
-        # 初始化clips列表(必须在try外部,确保finally可以访问)
-        all_clips = []
-        temp_clips = []  # 用于跟踪需要清理的临时clip
-        audio_clips = []  # 用于跟踪音频clips
+        # 🚀 多线程优化: 并行处理所有章节
+        print(f"\n🚀 使用多线程并行处理 {len(sections)} 个章节...")
 
-        # 遍历每个章节
-        for i, section in enumerate(sections, 1):
-            print(f"\n{'='*70}")
-            print(f"📝 章节 {i}/{len(sections)}: {section.get('section_name', f'章节{i}')}")
+        # 首先批量推荐素材（如果需要）
+        section_materials = {}
+        if auto_select_materials:
+            print("🔍 批量推荐素材...")
+            with ThreadPoolExecutor(max_workers=min(8, len(sections))) as executor:
+                future_to_section = {
+                    executor.submit(self._recommend_material_for_section, i, section): i
+                    for i, section in enumerate(sections)
+                }
 
-            # 获取章节信息
-            narration = section.get('narration', '')
-            visual_notes = section.get('visual_notes', '')
-            duration = self._parse_duration(
-                section.get('duration', self.default_image_duration),
-                default=self.default_image_duration
-            )
+                for future in as_completed(future_to_section):
+                    section_idx = future_to_section[future]
+                    try:
+                        material_path, material_info = future.result()
+                        section_materials[section_idx] = (material_path, material_info)
+                    except Exception as e:
+                        print(f"   ⚠️  章节 {section_idx + 1} 素材推荐失败: {str(e)}")
+                        section_materials[section_idx] = (None, None)
 
-            # V5.3: 显示章节内容详情
-            print(f"   时长: {duration}秒")
-            print(f"   旁白: {narration[:100]}{'...' if len(narration) > 100 else ''}")
-            print(f"   视觉: {visual_notes[:100]}{'...' if len(visual_notes) > 100 else ''}")
-
-            # 推荐素材
-            if auto_select_materials:
-                print("\n   🔍 智能推荐素材...")
-                recommendations = self.recommender.recommend_for_script_section(
-                    section,
-                    limit=3
-                )
-
-                if recommendations:
-                    # V5.3: 显示所有推荐素材
-                    print(f"\n   🎯 推荐结果 (共{len(recommendations)}个):")
-                    for idx, rec in enumerate(recommendations, 1):
-                        print(f"      {idx}. {rec['name']}")
-                        print(f"         类型: {rec['type']} | 匹配度: {rec['match_score']:.0f}% | 来源: {rec.get('source', 'local')}")
-                        print(f"         标签: {', '.join(rec.get('tags', [])[:5])}")
-                        if idx >= 3:
-                            break
-
-                    best_material = recommendations[0]
-                    material_path = best_material['file_path']
-                    print(f"\n   ✅ 最终选择: {best_material['name']} (匹配度: {best_material['match_score']:.0f}%)")
-                else:
-                    print("\n   ❌ 未找到合适素材，使用默认黑屏")
-                    material_path = None
-            else:
-                material_path = None
-
-            # 创建视频片段
-            if material_path and os.path.exists(material_path):
-                # 根据素材类型创建剪辑
-                ext = os.path.splitext(material_path)[1].lower()
-                if ext in ['.jpg', '.jpeg', '.png', '.gif', '.bmp']:
-                    clip = ImageClip(material_path).with_duration(duration)
-                elif ext in ['.mp4', '.avi', '.mov', '.mkv']:
-                    video_clip = VideoFileClip(material_path)
-                    # 如果视频长度不够，循环播放
-                    if video_clip.duration < duration:
-                        clip = video_clip.with_effects([Loop(duration=duration)])
-                    else:
-                        clip = video_clip.subclipped(0, duration)
-                else:
-                    print(f"   ⚠️  不支持的素材格式: {ext}")
-                    clip = self._create_color_clip((0, 0, 0), duration)
-            else:
-                # 创建黑屏
-                clip = self._create_color_clip((0, 0, 0), duration)
-
-            # 添加文字（如果需要）
-            if self.video_config.get('show_narration_text', True) and narration:
-                text_clip = self._create_text_clip(
-                    narration,
-                    duration=duration,
-                    position=('center', 'bottom'),
-                    fontsize=self.video_config.get('text_size', 40)
-                )
-                clip = CompositeVideoClip([clip, text_clip])
-
-            all_clips.append(clip)
-
-        if not all_clips:
-            raise ValueError("没有生成任何视频片段")
-
-        # 合并所有片段
-        print(f"\n🎞️  合并 {len(all_clips)} 个片段...")
-        final_video = concatenate_videoclips(all_clips, method="compose")
-
-        # V5.0: 添加TTS语音或背景音乐
-        if use_tts_audio and tts_metadata_path and os.path.exists(tts_metadata_path):
-            print("🎙️  添加TTS语音...")
-            try:
-                # 读取TTS元数据
-                with open(tts_metadata_path, 'r', encoding='utf-8') as f:
-                    tts_metadata = json.load(f)
-
-                audio_files = [item['file_path'] for item in tts_metadata.get('audio_files', [])]
-
-                if audio_files:
-                    # 合并所有TTS音频
-                    tts_audio_clips = [AudioFileClip(f) for f in audio_files if os.path.exists(f)]
-                    audio_clips.extend(tts_audio_clips)  # 追踪以便清理
-                    if tts_audio_clips:
-                        from moviepy import concatenate_audioclips
-                        tts_audio = concatenate_audioclips(tts_audio_clips)
-
-                        # 添加BGM作为背景(降低音量)
-                        bgm_path = self.video_config.get('default_bgm')
-                        if bgm_path and os.path.exists(bgm_path):
-                            bgm = AudioFileClip(bgm_path)
-                            if bgm.duration < tts_audio.duration:
-                                bgm = bgm.with_effects([AudioLoop(duration=tts_audio.duration)])
-                            else:
-                                bgm = bgm.subclipped(0, tts_audio.duration)
-                            # 降低BGM音量
-                            bgm = bgm.with_volume_scaled(0.2)
-                            # 混合TTS和BGM
-                            from moviepy.audio.AudioClip import CompositeAudioClip
-                            final_audio = CompositeAudioClip([tts_audio, bgm])
-                        else:
-                            final_audio = tts_audio
-
-                        final_video = final_video.with_audio(final_audio)
-                        print(f"   ✅ TTS音频已添加 (时长: {tts_audio.duration:.1f}秒)")
-
-                        # 调整视频长度以匹配音频
-                        if final_video.duration != tts_audio.duration:
-                            print(f"   ⚠️  调整视频长度: {final_video.duration:.1f}秒 -> {tts_audio.duration:.1f}秒")
-                            final_video = final_video.with_duration(tts_audio.duration)
-            except Exception as e:
-                print(f"   ⚠️  添加TTS音频失败: {str(e)}")
-                import traceback
-                traceback.print_exc()
-        else:
-            # 添加背景音乐（如果配置了）
-            bgm_path = self.video_config.get('default_bgm')
-            if bgm_path and os.path.exists(bgm_path):
-                print("🎵 添加背景音乐...")
-                try:
-                    audio = AudioFileClip(bgm_path)
-                    # 循环背景音乐以匹配视频长度
-                    if audio.duration < final_video.duration:
-                        audio = audio.with_effects([AudioLoop(duration=final_video.duration)])
-                    else:
-                        audio = audio.subclipped(0, final_video.duration)
-
-                    final_video = final_video.with_audio(audio)
-                except Exception as e:
-                    print(f"   ⚠️  添加音乐失败: {str(e)}")
-
-        # V5.0: 添加字幕
-        if subtitle_file and os.path.exists(subtitle_file):
-            print(f"📝 添加字幕: {subtitle_file}")
-            try:
-                from moviepy.video.tools.subtitles import SubtitlesClip
-
-                # 创建字幕函数
-                def generator(txt):
-                    from moviepy import TextClip
-                    # 从配置读取字体路径，如果没有则使用默认中文字体
-                    font_path = self.config.get('subtitle', {}).get('font',
-                                                                      '/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc')
-                    return TextClip(
-                        text=txt,
-                        font=font_path,  # 添加字体参数
-                        font_size=self.config.get('subtitle', {}).get('font_size', 48),
-                        color='white',
-                        bg_color='black',
-                        method='caption',
-                        size=(final_video.w - 200, None)
-                    )
-
-                # 加载字幕
-                subtitles = SubtitlesClip(subtitle_file, generator)
-
-                # 合成视频和字幕
-                from moviepy import CompositeVideoClip
-                final_video = CompositeVideoClip([
-                    final_video,
-                    subtitles.with_position(('center', 'bottom'))
-                ])
-
-                print("   ✅ 字幕已添加")
-            except Exception as e:
-                print(f"   ⚠️  添加字幕失败: {str(e)}")
-                print(f"   提示: 确保字幕文件格式正确,且moviepy支持字幕功能")
-                import traceback
-                traceback.print_exc()
-
+        # 并行创建视频片段
+        print("🎬 并行创建视频片段...")
         # 输出文件
         if output_filename is None:
             timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
@@ -281,48 +115,250 @@ class VideoComposer:
         output_path = os.path.join(self.editor.output_dir, output_filename)
 
         print(f"\n💾 导出视频...")
-        try:
-            final_video.write_videofile(
-                output_path,
-                fps=self.video_config.get('fps', 24),
-                codec=self.video_config.get('codec', 'libx264'),
-                audio_codec=self.video_config.get('audio_codec', 'aac')
+
+        total_duration, segment_count = self._render_with_ffmpeg(
+            sections=sections,
+            section_materials=section_materials,
+            output_path=output_path,
+            use_tts_audio=use_tts_audio,
+            tts_metadata_path=tts_metadata_path,
+        )
+
+        print(f"\n✅ 视频合成完成: {output_path}")
+        print(f"   时长: {total_duration:.1f}秒")
+        print(f"   片段数: {segment_count}")
+
+        return output_path
+
+    def _build_segments(
+        self,
+        sections: List[Dict[str, Any]],
+        section_materials: Dict[int, Tuple[Optional[str], Optional[Dict[str, Any]]]],
+    ) -> List[SegmentSpec]:
+        segments: List[SegmentSpec] = []
+        text_enabled = self.video_config.get('show_narration_text', True)
+        text_style = self._get_text_style()
+
+        for idx, section in enumerate(sections):
+            section_name = section.get('section_name', f'章节{idx + 1}')
+            narration = section.get('narration', '')
+            duration = self._parse_duration(
+                section.get('duration', self.default_image_duration),
+                default=self.default_image_duration
             )
 
-            print(f"\n✅ 视频合成完成: {output_path}")
-            print(f"   时长: {final_video.duration:.1f}秒")
-            print(f"   片段数: {len(all_clips)}")
+            material_path = None
+            material_info = None
+            if idx in section_materials:
+                material_path, material_info = section_materials[idx]
 
-            return output_path
+            if not material_path:
+                fallback_path = section.get('material_path') or section.get('material')
+                if fallback_path and os.path.exists(fallback_path):
+                    material_path = fallback_path
 
-        finally:
-            # 清理资源 - 防止内存泄漏
-            print("\n🧹 清理临时资源...")
+            source_type = self._detect_media_type(material_path)
+
+            text_value = narration if text_enabled and narration else None
+            segment = SegmentSpec(
+                index=idx,
+                source_path=material_path,
+                source_type=source_type,
+                duration=duration,
+                text=text_value,
+                section_name=section_name,
+                text_style=text_style if text_value else None,
+            )
+            segments.append(segment)
+
+            material_desc = '黑屏' if source_type == 'color' else os.path.basename(material_path)
+            print(f"   ✅ 章节 {idx + 1}/{len(sections)}: {section_name} (素材: {material_desc})")
+
+        return segments
+
+    def _detect_media_type(self, path: Optional[str]) -> str:
+        if not path or not os.path.exists(path):
+            return 'color'
+
+        ext = os.path.splitext(path)[1].lower()
+        if ext in {'.mp4', '.mov', '.mkv', '.avi', '.webm'}:
+            return 'video'
+        if ext in {'.jpg', '.jpeg', '.png', '.gif', '.bmp', '.webp'}:
+            return 'image'
+        return 'color'
+
+    def _get_text_style(self) -> Dict[str, str]:
+        style: Dict[str, str] = {}
+        subtitle_cfg = self.config.get('subtitle', {})
+        font_path = subtitle_cfg.get('font')
+        if font_path and os.path.exists(font_path):
+            style['font'] = font_path
+        style['fontsize'] = str(self.video_config.get('text_size', 40))
+        style['fontcolor'] = subtitle_cfg.get('font_color', 'white')
+        style['boxcolor'] = f"{subtitle_cfg.get('bg_color', 'black')}@{subtitle_cfg.get('bg_opacity', 0.5)}"
+        style['boxborder'] = '30'
+        style['margin'] = '100'
+        return style
+
+    def _build_audio_plan(
+        self,
+        *,
+        use_tts_audio: bool,
+        tts_metadata_path: Optional[str],
+        video_duration: float,
+    ) -> Optional[AudioPlan]:
+        audio_codec = self.video_config.get('audio_codec', 'aac')
+        bgm_path = self.video_config.get('default_bgm')
+        bgm_volume = self.config.get('tts', {}).get('bgm_volume', 0.2)
+        enable_bgm_mix = self.config.get('tts', {}).get('enable_bgm_mixing', True)
+
+        if use_tts_audio and tts_metadata_path and os.path.exists(tts_metadata_path):
+            print("🎙️  使用TTS音频...")
             try:
-                # 清理视频clips
-                for clip in all_clips:
-                    if clip and hasattr(clip, 'close'):
-                        try:
-                            clip.close()
-                        except:
-                            pass
+                with open(tts_metadata_path, 'r', encoding='utf-8') as f:
+                    metadata = json.load(f)
+            except (OSError, json.JSONDecodeError) as exc:
+                print(f"   ⚠️  无法读取TTS元数据: {exc}")
+            else:
+                audio_items = metadata.get('audio_files', [])
+                audio_files = [item.get('file_path') for item in audio_items if item.get('file_path') and os.path.exists(item.get('file_path'))]
+                durations = [float(item.get('duration', 0.0) or 0.0) for item in audio_items if item.get('file_path') and os.path.exists(item.get('file_path'))]
 
-                # 清理音频clips
-                for clip in audio_clips:
-                    if clip and hasattr(clip, 'close'):
-                        try:
-                            clip.close()
-                        except:
-                            pass
+                if audio_files:
+                    print(f"   ✅ 合并 {len(audio_files)} 段语音")
+                    bgm_candidate = bgm_path if (bgm_path and os.path.exists(bgm_path) and enable_bgm_mix) else None
+                    target_duration = sum(durations) if durations else video_duration
+                    return AudioPlan(
+                        use_tts=True,
+                        tts_inputs=audio_files,
+                        tts_durations=durations or [target_duration],
+                        bgm_path=bgm_candidate,
+                        bgm_volume=bgm_volume,
+                        target_duration=target_duration,
+                        audio_codec=audio_codec,
+                    )
 
-                # 清理最终视频
-                if 'final_video' in locals() and hasattr(final_video, 'close'):
+        if bgm_path and os.path.exists(bgm_path):
+            print("🎵 使用背景音乐填充音轨")
+            return AudioPlan(
+                use_tts=False,
+                tts_inputs=[],
+                tts_durations=[],
+                bgm_path=bgm_path,
+                bgm_volume=bgm_volume,
+                target_duration=video_duration,
+                audio_codec=audio_codec,
+            )
+
+        print("🔇 未配置音频，将输出无声视频")
+        return None
+
+    def _get_resolution(self) -> Tuple[int, int]:
+        resolution = self.video_config.get('resolution', {'width': 1920, 'height': 1080})
+        if isinstance(resolution, dict):
+            width = int(resolution.get('width', 1920))
+            height = int(resolution.get('height', 1080))
+        else:
+            width, height = resolution
+        return width, height
+
+    def _render_with_ffmpeg(
+        self,
+        *,
+        sections: List[Dict[str, Any]],
+        section_materials: Dict[int, Tuple[Optional[str], Optional[Dict[str, Any]]]],
+        output_path: str,
+        use_tts_audio: bool,
+        tts_metadata_path: Optional[str],
+    ) -> Tuple[float, int]:
+        segments = self._build_segments(
+            sections=sections,
+            section_materials=section_materials,
+        )
+
+        if not segments:
+            raise ValueError("没有生成任何视频片段")
+
+        total_duration = sum(segment.duration for segment in segments)
+        audio_plan = self._build_audio_plan(
+            use_tts_audio=use_tts_audio,
+            tts_metadata_path=tts_metadata_path,
+            video_duration=total_duration,
+        )
+
+        if audio_plan and audio_plan.use_tts:
+            audio_total = sum(audio_plan.tts_durations)
+            diff = audio_total - total_duration
+            if abs(diff) > 0.1:
+                last_segment = segments[-1]
+                adjusted_duration = max(0.5, last_segment.duration + diff)
+                segments[-1] = replace(last_segment, duration=adjusted_duration)
+
+        total_duration = sum(segment.duration for segment in segments)
+        if audio_plan:
+            if audio_plan.use_tts:
+                audio_total = sum(audio_plan.tts_durations)
+                audio_plan.target_duration = max(audio_total, total_duration)
+            else:
+                audio_plan.target_duration = total_duration
+
+        renderer = FFmpegTimelineRenderer(
+            ffmpeg_path=os.environ.get('IMAGEIO_FFMPEG_EXE', 'ffmpeg'),
+            ffprobe_path=os.environ.get('FFPROBE_BINARY', 'ffprobe'),
+        )
+
+        codec = self.video_config.get('codec', 'libx264')
+        use_gpu = self.video_config.get('gpu_acceleration', False) and 'nvenc' in codec
+
+        preset = None
+        nvenc_params = None
+        if use_gpu:
+            preset = self.video_config.get('gpu_preset', 'p4')
+            custom_nvenc = self.video_config.get('nvenc_params')
+            if isinstance(custom_nvenc, list) and custom_nvenc:
+                nvenc_params = [str(p) for p in custom_nvenc]
+            else:
+                cq = str(self.video_config.get('nvenc_cq', 19))
+                nvenc_params = ['-rc', 'vbr', '-cq', cq]
+            print(f"   🚀 启用GPU加速: {codec} (preset: {preset})")
+        else:
+            preset = self.video_config.get('preset', 'medium')
+
+        render_kwargs = dict(
+            segments=segments,
+            output_path=output_path,
+            fps=self.video_config.get('fps', 24),
+            resolution=self._get_resolution(),
+            codec=codec,
+            preset=preset,
+            bitrate=self.video_config.get('bitrate'),
+            threads=self.video_config.get('threads'),
+            nvenc_params=nvenc_params,
+            audio_plan=audio_plan,
+        )
+
+        try:
+            renderer.render(**render_kwargs)
+        except FFmpegRenderError as exc:
+            if use_gpu:
+                print("\n⚠️  NVENC导出失败，尝试回退到CPU编码(libx264)...")
+                print(f"   ❌ NVENC失败详情: {exc}")
+                if os.path.exists(output_path):
                     try:
-                        final_video.close()
-                    except:
+                        os.remove(output_path)
+                    except OSError:
                         pass
-            except Exception as e:
-                print(f"   ⚠️  清理资源时出现警告: {str(e)}")
+
+                render_kwargs.update(
+                    codec='libx264',
+                    preset=self.video_config.get('preset', 'medium'),
+                    nvenc_params=None,
+                )
+                renderer.render(**render_kwargs)
+            else:
+                raise
+
+        return total_duration, len(segments)
 
     def compose_with_custom_materials(
         self,
@@ -341,65 +377,31 @@ class VideoComposer:
         Returns:
             视频文件路径
         """
-        if not self.editor.moviepy_available:
-            raise ImportError("moviepy未安装")
-
-        from moviepy import (
-            ImageClip, VideoFileClip, TextClip, CompositeVideoClip,
-            concatenate_videoclips
-        )
-
         print(f"\n🎬 开始合成视频（自定义素材）: {script.get('title', '未命名')}")
 
         sections = script.get('sections', [])
-        all_clips = []
-
-        for i, section in enumerate(sections):
-            material_path = material_mapping.get(i)
-
-            if material_path and os.path.exists(material_path):
-                duration = self._parse_duration(
-                    section.get('duration', self.default_image_duration),
-                    default=self.default_image_duration
-                )
-
-                ext = os.path.splitext(material_path)[1].lower()
-                if ext in ['.jpg', '.jpeg', '.png', '.gif', '.bmp']:
-                    clip = ImageClip(material_path).with_duration(duration)
-                elif ext in ['.mp4', '.avi', '.mov', '.mkv']:
-                    video_clip = VideoFileClip(material_path)
-                    if video_clip.duration < duration:
-                        clip = video_clip.with_effects([Loop(duration=duration)])
-                    else:
-                        clip = video_clip.subclipped(0, duration)
-                else:
-                    continue
-
-                # 添加文字
-                narration = section.get('narration', '')
-                if narration and self.video_config.get('show_narration_text', True):
-                    text_clip = self._create_text_clip(
-                        narration,
-                        duration=duration,
-                        position=('center', 'bottom')
-                    )
-                    clip = CompositeVideoClip([clip, text_clip])
-
-                all_clips.append(clip)
-
-        if not all_clips:
-            raise ValueError("没有有效的视频片段")
-
-        final_video = concatenate_videoclips(all_clips, method="compose")
-
         if output_filename is None:
             timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
             output_filename = f"video_custom_{timestamp}.mp4"
 
         output_path = os.path.join(self.editor.output_dir, output_filename)
-        final_video.write_videofile(output_path, fps=24)
+        section_materials = {
+            idx: (path if path and os.path.exists(path) else None, None)
+            for idx, path in material_mapping.items()
+        }
+
+        total_duration, segment_count = self._render_with_ffmpeg(
+            sections=sections,
+            section_materials=section_materials,
+            output_path=output_path,
+            use_tts_audio=False,
+            tts_metadata_path=None,
+        )
 
         print(f"\n✅ 视频合成完成: {output_path}")
+        print(f"   时长: {total_duration:.1f}秒")
+        print(f"   片段数: {segment_count}")
+
         return output_path
 
     def preview_material_recommendations(self, script: Dict[str, Any]) -> List[Dict[str, Any]]:
@@ -549,6 +551,112 @@ class VideoComposer:
         # 粗略估算：1080p 24fps 约 5MB/分钟
         bitrate_mb_per_min = self.video_config.get('estimated_bitrate_mb_per_min', 5.0)
         return round((duration / 60.0) * bitrate_mb_per_min, 2)
+
+    def _recommend_material_for_section(self, section_idx: int, section: Dict[str, Any]) -> Tuple[Optional[str], Optional[Dict]]:
+        """
+        为单个章节推荐素材（多线程辅助函数）
+
+        Args:
+            section_idx: 章节索引
+            section: 章节字典
+
+        Returns:
+            (素材路径, 素材信息) 元组
+        """
+        recommendations = self.recommender.recommend_for_script_section(section, limit=3)
+
+        if recommendations:
+            best_material = recommendations[0]
+            return best_material['file_path'], best_material
+        else:
+            return None, None
+
+    def _create_clip_from_material(self, material_path: Optional[str], duration: float):
+        """
+        从素材创建视频片段（多线程辅助函数）
+
+        Args:
+            material_path: 素材路径
+            duration: 持续时间
+
+        Returns:
+            视频片段对象
+        """
+        from moviepy import ImageClip, VideoFileClip
+        from moviepy.video.fx import Loop
+
+        if material_path and os.path.exists(material_path):
+            # 根据素材类型创建剪辑
+            ext = os.path.splitext(material_path)[1].lower()
+            if ext in ['.jpg', '.jpeg', '.png', '.gif', '.bmp']:
+                clip = ImageClip(material_path).with_duration(duration)
+            elif ext in ['.mp4', '.avi', '.mov', '.mkv']:
+                video_clip = VideoFileClip(material_path)
+
+                # 移除音频（因为我们会使用TTS音频）
+                video_clip = video_clip.without_audio()
+
+                # 如果视频长度不够，循环播放
+                if video_clip.duration < duration:
+                    clip = video_clip.with_effects([Loop(duration=duration)])
+                else:
+                    clip = video_clip.subclipped(0, duration)
+            else:
+                clip = self._create_color_clip((0, 0, 0), duration)
+        else:
+            # 创建黑屏
+            clip = self._create_color_clip((0, 0, 0), duration)
+
+        return self._ensure_target_resolution(clip)
+
+    def _ensure_target_resolution(self, clip):
+        """确保剪辑符合目标分辨率（Letterbox 适配）。"""
+        try:
+            resolution = self.video_config.get('resolution', {'width': 1920, 'height': 1080})
+            if isinstance(resolution, dict):
+                target_width = int(resolution.get('width', 1920))
+                target_height = int(resolution.get('height', 1080))
+            else:
+                target_width, target_height = resolution
+
+            if not target_width or not target_height:
+                return clip
+
+            clip_width, clip_height = clip.size
+            if clip_width is None or clip_height is None:
+                return clip
+
+            # NVENC 需要偶数分辨率
+            target_width = max(2, (target_width // 2) * 2)
+            target_height = max(2, (target_height // 2) * 2)
+
+            if clip_width == target_width and clip_height == target_height:
+                return clip
+
+            clip_ratio = clip_width / clip_height
+            target_ratio = target_width / target_height
+
+            if clip_ratio >= target_ratio:
+                new_width = target_width
+                new_height = int(round(target_width / clip_ratio))
+            else:
+                new_height = target_height
+                new_width = int(round(target_height * clip_ratio))
+
+            # 保证偶数尺寸
+            new_width = max(2, (new_width // 2) * 2)
+            new_height = max(2, (new_height // 2) * 2)
+
+            resized_clip = clip.resized(new_size=(new_width, new_height))
+
+            return resized_clip.with_background_color(
+                size=(target_width, target_height),
+                color=(0, 0, 0),
+                pos='center'
+            )
+        except Exception as e:
+            print(f"   ⚠️  调整分辨率失败: {e}")
+            return clip
 
     def _parse_duration(self, duration_value: Any, default: float = 5.0) -> float:
         """

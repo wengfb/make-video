@@ -8,6 +8,17 @@ import os
 from typing import Dict, Any, List, Optional, Tuple
 from datetime import datetime
 
+# 确保在导入moviepy之前就重定向到系统FFmpeg
+SYS_FFMPEG = '/usr/bin/ffmpeg'
+if os.path.exists(SYS_FFMPEG):
+    os.environ.setdefault('IMAGEIO_FFMPEG_EXE', SYS_FFMPEG)
+    os.environ.setdefault('FFMPEG_BINARY', SYS_FFMPEG)
+    try:
+        import moviepy.config as mp_config  # noqa: E402
+        mp_config.FFMPEG_BINARY = SYS_FFMPEG
+    except Exception:
+        pass
+
 
 class VideoEditor:
     """视频剪辑器（基础框架）"""
@@ -28,8 +39,33 @@ class VideoEditor:
 
         os.makedirs(self.output_dir, exist_ok=True)
 
+        # 优先使用系统FFmpeg（通常包含NVENC支持）。
+        # MoviePy 默认走 imageio-ffmpeg 的内置二进制，往往不含 NVENC。
+        try:
+            sys_ffmpeg = '/usr/bin/ffmpeg'
+            if os.path.exists(sys_ffmpeg):
+                # 强制使用系统FFmpeg，确保NVENC可用
+                os.environ['IMAGEIO_FFMPEG_EXE'] = sys_ffmpeg
+                os.environ['FFMPEG_BINARY'] = sys_ffmpeg
+                try:
+                    import moviepy.config as mp_config
+                    mp_config.FFMPEG_BINARY = sys_ffmpeg
+                except Exception:
+                    pass
+        except Exception:
+            pass
+
         # 检查moviepy是否可用
         self.moviepy_available = self._check_moviepy()
+        if self.moviepy_available:
+            try:
+                # 显示最终使用的ffmpeg二进制，便于诊断
+                import imageio_ffmpeg as i
+                import moviepy.config as mp_config
+                print(f"FFmpeg 使用路径: {i.get_ffmpeg_exe()}")
+                print(f"MoviePy FFMPEG_BINARY: {mp_config.FFMPEG_BINARY}")
+            except Exception:
+                pass
 
     def _check_moviepy(self) -> bool:
         """检查moviepy是否安装"""

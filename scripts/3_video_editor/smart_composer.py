@@ -8,6 +8,8 @@ import os
 import sys
 from typing import Dict, Any, List, Optional
 from datetime import datetime
+from concurrent.futures import ThreadPoolExecutor, as_completed
+import threading
 
 # 导入基础合成器
 sys.path.insert(0, os.path.dirname(__file__))
@@ -153,22 +155,43 @@ class SmartVideoComposer(VideoComposer):
                   f"能量{analysis['energy_level']:.1f}, "
                   f"情绪{analysis['emotion']}")
 
-        # ========== 第2步: 生成带动效的clips ==========
+        # ========== 第2步: 🚀 并行生成带动效的clips ==========
         all_clips = []
         temp_clips = []
         audio_clips = []
 
-        print(f"\n🎨 生成视频片段...")
+        print(f"\n🎨 🚀 并行生成视频片段...")
 
-        for i, (section, analysis) in enumerate(zip(sections, analyses), 1):
-            section_name = section.get('section_name', f'章节{i}')
-            print(f"\n📝 处理章节 {i}/{len(sections)}: {section_name}")
+        # 预先获取所有素材路径（如果需要自动选择）
+        section_materials = {}
+        if auto_select_materials:
+            print("🔍 批量推荐素材...")
+            with ThreadPoolExecutor(max_workers=min(8, len(sections))) as executor:
+                future_to_idx = {
+                    executor.submit(self._get_material_for_section, section, True): i
+                    for i, section in enumerate(sections)
+                }
+                for future in as_completed(future_to_idx):
+                    idx = future_to_idx[future]
+                    try:
+                        section_materials[idx] = future.result()
+                    except Exception as e:
+                        print(f"   ⚠️  章节 {idx + 1} 素材推荐失败: {str(e)}")
+                        section_materials[idx] = None
+
+        # 并行创建视频片段（保留顺序）
+        clips_dict = {}
+        lock = threading.Lock()
+
+        def create_smart_clip(i, section, analysis):
+            """智能创建单个视频片段"""
+            section_name = section.get('section_name', f'章节{i+1}')
 
             # 2.1 获取素材
-            material_path = self._get_material_for_section(
-                section,
-                auto_select_materials
-            )
+            if auto_select_materials:
+                material_path = section_materials.get(i)
+            else:
+                material_path = None
 
             duration = self._parse_duration(
                 section.get('duration', self.default_image_duration),
@@ -179,6 +202,7 @@ class SmartVideoComposer(VideoComposer):
             clip = self._create_base_clip(material_path, duration)
 
             # 2.3 应用Ken Burns效果（如果是静态图片）
+            kb_info = ""
             if self.ken_burns_enabled and material_path:
                 ext = os.path.splitext(material_path)[1].lower()
                 if ext in ['.jpg', '.png', '.jpeg', '.gif']:
@@ -187,20 +211,17 @@ class SmartVideoComposer(VideoComposer):
                         analysis['emotion']
                     )
                     clip = self.ken_burns.apply_ken_burns(clip, analysis, duration)
-                    print(f"   ✨ Ken Burns: {movement_type}")
+                    kb_info = f" | KB: {movement_type}"
 
             # 2.4 决定转场（除第一个clip）
+            trans_info = ""
             if i > 0:
                 transition = self.transition_engine.decide_transition(
                     analyses[i-1],
                     analysis,
                     analyses[i+1] if i < len(analyses)-1 else None
                 )
-
-                print(f"   🎬 转场: {transition['type']} "
-                      f"({transition['duration']}s)")
-                print(f"      理由: {transition['reason']}")
-
+                trans_info = f" | 转场: {transition['type']}"
                 # 应用转场
                 clip = self._apply_transition(clip, transition)
 
@@ -215,7 +236,26 @@ class SmartVideoComposer(VideoComposer):
                 )
                 clip = CompositeVideoClip([clip, text_clip])
 
-            all_clips.append(clip)
+            with lock:
+                clips_dict[i] = clip
+                print(f"   ✅ 章节 {i+1}/{len(sections)}: {section_name}{kb_info}{trans_info}")
+
+            return clip
+
+        # 并行处理所有章节（由于转场需要前后信息，降低并行度）
+        with ThreadPoolExecutor(max_workers=min(3, len(sections))) as executor:
+            futures = [
+                executor.submit(create_smart_clip, i, section, analyses[i])
+                for i, section in enumerate(sections)
+            ]
+            for future in as_completed(futures):
+                try:
+                    future.result()
+                except Exception as e:
+                    print(f"   ⚠️  创建片段失败: {str(e)}")
+
+        # 按顺序组装clips
+        all_clips = [clips_dict[i] for i in sorted(clips_dict.keys())]
 
         if not all_clips:
             raise ValueError("没有生成任何视频片段")
@@ -277,22 +317,29 @@ class SmartVideoComposer(VideoComposer):
     def _create_base_clip(self, material_path: Optional[str], duration: float):
         """创建基础clip"""
         from moviepy import ImageClip, VideoFileClip
+        from moviepy.video.fx import Loop
 
         if material_path and os.path.exists(material_path):
             ext = os.path.splitext(material_path)[1].lower()
             if ext in ['.jpg', '.jpeg', '.png', '.gif', '.bmp']:
-                return ImageClip(material_path).with_duration(duration)
+                clip = ImageClip(material_path).with_duration(duration)
             elif ext in ['.mp4', '.avi', '.mov', '.mkv']:
                 video_clip = VideoFileClip(material_path)
+
+                # 移除音频（因为我们会使用TTS音频）
+                video_clip = video_clip.without_audio()
+
                 if video_clip.duration < duration:
-                    return video_clip.with_effects([Loop(duration=duration)])
+                    clip = video_clip.with_effects([Loop(duration=duration)])
                 else:
-                    return video_clip.subclipped(0, duration)
+                    clip = video_clip.subclipped(0, duration)
             else:
                 print(f"   ⚠️  不支持的格式: {ext}")
-                return self._create_color_clip((0, 0, 0), duration)
+                clip = self._create_color_clip((0, 0, 0), duration)
         else:
-            return self._create_color_clip((0, 0, 0), duration)
+            clip = self._create_color_clip((0, 0, 0), duration)
+
+        return self._ensure_target_resolution(clip)
 
     def _apply_transition(self, clip, transition: Dict[str, Any]):
         """应用转场效果到clip"""
@@ -430,12 +477,67 @@ class SmartVideoComposer(VideoComposer):
         output_path = os.path.join(self.editor.output_dir, output_filename)
 
         print(f"\n💾 导出视频...")
-        video_clip.write_videofile(
-            output_path,
-            fps=self.video_config.get('fps', 24),
-            codec=self.video_config.get('codec', 'libx264'),
-            audio_codec=self.video_config.get('audio_codec', 'aac')
-        )
+
+        # 构建FFmpeg参数（支持GPU加速）
+        codec = self.video_config.get('codec', 'libx264')
+        ffmpeg_params = []
+
+        if self.video_config.get('gpu_acceleration', False) and 'nvenc' in codec:
+            # NVIDIA GPU加速参数（NVENC编码器选项）
+            preset = self.video_config.get('gpu_preset', 'p4')
+            ffmpeg_params = ['-preset', str(preset)]
+
+            custom_nvenc = self.video_config.get('nvenc_params')
+            if isinstance(custom_nvenc, list):
+                ffmpeg_params.extend(str(p) for p in custom_nvenc)
+
+            print(f"   🚀 启用GPU加速: {codec} (preset: {preset})")
+
+        # 构建write_videofile参数
+        write_params = {
+            'fps': self.video_config.get('fps', 24),
+            'codec': codec,
+            'audio_codec': self.video_config.get('audio_codec', 'aac'),
+            'threads': self.video_config.get('threads', 4)
+        }
+
+        # 添加FFmpeg参数（如果有）
+        if ffmpeg_params:
+            write_params['ffmpeg_params'] = ffmpeg_params
+
+        # 如果不是GPU编码，添加preset
+        if 'nvenc' not in codec:
+            write_params['preset'] = self.video_config.get('preset', 'medium')
+
+        # 执行导出，失败时自动回退到CPU编码
+        try:
+            try:
+                from moviepy.video.io import ffmpeg_writer
+                print(f"   🧪 FFmpeg二进制: {ffmpeg_writer.FFMPEG_BINARY}")
+                print(f"   🧵 FFmpeg线程数: {write_params.get('threads')}")
+            except Exception:
+                pass
+
+            video_clip.write_videofile(output_path, **write_params)
+        except Exception as e:
+            if 'nvenc' in codec.lower():
+                print("\n⚠️  NVENC导出失败，尝试回退到CPU编码(libx264)...")
+                print(f"   ❌ NVENC失败详情: {e}")
+                try:
+                    if os.path.exists(output_path):
+                        os.remove(output_path)
+                except Exception:
+                    pass
+
+                try:
+                    write_params.pop('ffmpeg_params', None)
+                    write_params['codec'] = 'libx264'
+                    write_params['preset'] = self.video_config.get('preset', 'medium')
+                    video_clip.write_videofile(output_path, **write_params)
+                except Exception:
+                    raise e
+            else:
+                raise
 
         print(f"\n✅ 智能视频合成完成!")
         print(f"   输出: {output_path}")
@@ -469,3 +571,50 @@ class SmartVideoComposer(VideoComposer):
                     pass
         except Exception as e:
             print(f"   ⚠️  清理时出错: {str(e)}")
+
+    def _ensure_target_resolution(self, clip):
+        """确保剪辑符合目标分辨率（Letterbox 适配）。"""
+        try:
+            resolution = self.video_config.get('resolution', {'width': 1920, 'height': 1080})
+            if isinstance(resolution, dict):
+                target_width = int(resolution.get('width', 1920))
+                target_height = int(resolution.get('height', 1080))
+            else:
+                target_width, target_height = resolution
+
+            if not target_width or not target_height:
+                return clip
+
+            clip_width, clip_height = clip.size
+            if clip_width is None or clip_height is None:
+                return clip
+
+            target_width = max(2, (target_width // 2) * 2)
+            target_height = max(2, (target_height // 2) * 2)
+
+            if clip_width == target_width and clip_height == target_height:
+                return clip
+
+            clip_ratio = clip_width / clip_height
+            target_ratio = target_width / target_height
+
+            if clip_ratio >= target_ratio:
+                new_width = target_width
+                new_height = int(round(target_width / clip_ratio))
+            else:
+                new_height = target_height
+                new_width = int(round(target_height * clip_ratio))
+
+            new_width = max(2, (new_width // 2) * 2)
+            new_height = max(2, (new_height // 2) * 2)
+
+            resized_clip = clip.resized(new_size=(new_width, new_height))
+
+            return resized_clip.with_background_color(
+                size=(target_width, target_height),
+                color=(0, 0, 0),
+                pos='center'
+            )
+        except Exception as e:
+            print(f"   ⚠️  调整分辨率失败: {e}")
+            return clip
