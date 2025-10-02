@@ -225,9 +225,13 @@ class VideoComposer:
                 # 创建字幕函数
                 def generator(txt):
                     from moviepy import TextClip
+                    # 从配置读取字体路径，如果没有则使用默认中文字体
+                    font_path = self.config.get('subtitle', {}).get('font',
+                                                                      '/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc')
                     return TextClip(
                         text=txt,
-                        font_size=self.video_config.get('text_size', 48),
+                        font=font_path,  # 添加字体参数
+                        font_size=self.config.get('subtitle', {}).get('font_size', 48),
                         color='white',
                         bg_color='black',
                         method='caption',
