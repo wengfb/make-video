@@ -53,6 +53,12 @@ mat_ui_module = importlib.util.module_from_spec(spec6)
 spec6.loader.exec_module(mat_ui_module)
 material_manager_menu = mat_ui_module.material_manager_menu
 
+# 加载素材扫描器 (V5.2)
+spec_scanner = importlib.util.spec_from_file_location("material_scanner", "scripts/2_material_manager/scanner.py")
+scanner_module = importlib.util.module_from_spec(spec_scanner)
+spec_scanner.loader.exec_module(scanner_module)
+MaterialScanner = scanner_module.MaterialScanner
+
 # 加载视频合成器
 spec7 = importlib.util.spec_from_file_location("video_composer", "scripts/3_video_editor/composer.py")
 video_comp_module = importlib.util.module_from_spec(spec7)
@@ -179,6 +185,7 @@ def interactive_mode():
         print("  7. 直接生成脚本")
         print("\n🎨 素材管理:")
         print("  10. 素材管理（素材库+AI生成）")
+        print("  19. 扫描并注册未注册素材 ⭐ NEW")
         print("\n🎬 视频合成:")
         print("  11. 从脚本生成视频（自动）")
         print("  11s. 智能视频合成（AI动效） ⭐ NEW")
@@ -198,7 +205,7 @@ def interactive_mode():
         print("  0. 退出")
         print("=" * 60)
 
-        choice = input("\n请选择功能 (0-18, 11s): ").strip()
+        choice = input("\n请选择功能 (0-19, 11s): ").strip()
 
         if choice == '0':
             print("\n👋 再见！")
@@ -246,6 +253,9 @@ def interactive_mode():
         elif choice == '18':
             # V5.0: 全自动AI工作流
             full_ai_workflow(topic_gen, script_gen, tts_generator, subtitle_generator, video_composer)
+        elif choice == '19':
+            # V5.2: 扫描并注册未注册素材
+            scan_and_register_materials()
         else:
             print("\n❌ 无效的选择，请重新输入")
 
@@ -1531,6 +1541,51 @@ def full_ai_workflow(
 
     except Exception as e:
         print(f"\n❌ 视频合成失败: {str(e)}")
+        import traceback
+        traceback.print_exc()
+
+
+def scan_and_register_materials():
+    """扫描并注册未注册的素材 (V5.2)"""
+    print("\n" + "=" * 60)
+    print("🔍 素材库扫描和注册工具")
+    print("=" * 60)
+
+    try:
+        # 创建扫描器实例
+        scanner = MaterialScanner()
+
+        print("\n💡 此工具会扫描 materials/ 目录下的所有素材文件,")
+        print("   并将未注册的素材添加到素材库 (materials.json)")
+        print("\n选项:")
+        print("  1. 预览模式（只扫描不注册）")
+        print("  2. 立即注册所有未注册素材")
+        print("  0. 返回主菜单")
+
+        choice = input("\n请选择 (0-2): ").strip()
+
+        if choice == '0':
+            return
+        elif choice == '1':
+            # 预览模式
+            scanner.scan_and_register_all(dry_run=True)
+        elif choice == '2':
+            # 确认
+            confirm = input("\n⚠️  确认要注册所有未注册素材? (Y/n): ").strip().lower()
+            if confirm == 'n':
+                print("已取消")
+                return
+
+            # 实际注册
+            result = scanner.scan_and_register_all(dry_run=False)
+
+            if result['registered'] > 0:
+                print("\n💡 提示: 现在素材库已更新，视频合成将使用这些新注册的素材")
+        else:
+            print("\n❌ 无效的选择")
+
+    except Exception as e:
+        print(f"\n❌ 扫描失败: {str(e)}")
         import traceback
         traceback.print_exc()
 

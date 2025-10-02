@@ -441,41 +441,80 @@ class MaterialRecommender:
         text = visual_notes if visual_notes else narration
 
         # 简单映射(中文 → 英文科普关键词)
+        # ✨ V5.2 扩展: 添加更多气候和科学相关关键词
         keyword_map = {
+            # 宇宙和天文
             '宇宙': 'space universe',
             '星空': 'stars galaxy',
             '太空': 'space',
+            '黑洞': 'black hole',
+            '星系': 'galaxy',
+            '行星': 'planet',
+            '恒星': 'star',
+
+            # 生物和医学
             'DNA': 'DNA genetics',
             '基因': 'DNA genetics',
             '细胞': 'cell biology',
             '大脑': 'brain neuroscience',
             '神经': 'neuron brain',
-            '量子': 'quantum physics',
-            '物理': 'physics',
-            '化学': 'chemistry science',
-            '生物': 'biology nature',
-            '科技': 'technology innovation',
-            '人工智能': 'artificial intelligence AI',
-            'AI': 'artificial intelligence',
-            '机器人': 'robot technology',
-            '能源': 'energy renewable',
-            '环境': 'environment nature',
-            '海洋': 'ocean sea',
-            '地球': 'earth planet',
-            '火山': 'volcano',
-            '地震': 'earthquake',
-            '气候': 'climate weather',
             '医学': 'medicine medical',
             '健康': 'health medical',
             '心脏': 'heart cardiology',
             '肺': 'lungs respiratory',
             '血液': 'blood circulation',
+
+            # 物理和化学
+            '量子': 'quantum physics',
+            '物理': 'physics',
+            '化学': 'chemistry science',
             '分子': 'molecule chemistry',
             '原子': 'atom physics',
             '电子': 'electron technology',
             '光': 'light optics',
             '声音': 'sound wave',
-            '电': 'electricity energy'
+            '电': 'electricity energy',
+            '相对论': 'relativity physics',
+            '时空': 'spacetime physics',
+
+            # 科技和AI
+            '科技': 'technology innovation',
+            '人工智能': 'artificial intelligence AI',
+            'AI': 'artificial intelligence',
+            '机器人': 'robot technology',
+            '计算机': 'computer technology',
+            '量子计算': 'quantum computing',
+
+            # 环境和气候 (重点扩展)
+            '气候': 'climate weather',
+            '气候变化': 'climate change global warming',
+            '全球变暖': 'global warming',
+            '温室效应': 'greenhouse effect',
+            '温室气体': 'greenhouse gas emissions',
+            '碳排放': 'carbon emissions',
+            '二氧化碳': 'carbon dioxide CO2',
+            '环境': 'environment nature',
+            '生态': 'ecology ecosystem',
+            '污染': 'pollution',
+            '可再生能源': 'renewable energy',
+            '太阳能': 'solar energy',
+            '风能': 'wind energy',
+            '冰川': 'glacier ice',
+            '海平面': 'sea level',
+            '极端天气': 'extreme weather',
+
+            # 地球科学
+            '地球': 'earth planet',
+            '海洋': 'ocean sea',
+            '火山': 'volcano',
+            '地震': 'earthquake',
+            '地质': 'geology',
+            '矿物': 'mineral',
+
+            # 能源
+            '能源': 'energy renewable',
+            '核能': 'nuclear energy',
+            '电池': 'battery energy storage'
         }
 
         # 查找匹配
@@ -513,7 +552,7 @@ class MaterialRecommender:
                     filepath = self.pexels_fetcher.download_video(video, keyword)
                     if filepath:
                         # 转换为统一格式
-                        materials.append({
+                        material_data = {
                             'id': f"pexels_video_{video['id']}",
                             'name': f"{keyword}_{video['id']}",
                             'type': 'video',
@@ -524,7 +563,24 @@ class MaterialRecommender:
                             'match_score': 85,  # 外部视频默认高分
                             'rating': 4,
                             'used_count': 0
-                        })
+                        }
+                        materials.append(material_data)
+
+                        # ✨ 将素材注册到素材库（持久化）
+                        try:
+                            # 检查是否已存在
+                            existing = self.material_manager.search_materials(f"pexels_video_{video['id']}")
+                            if not existing:
+                                self.material_manager.add_material(
+                                    name=material_data['name'],
+                                    file_path=filepath,
+                                    material_type='video',
+                                    tags=material_data['tags'],
+                                    description=material_data['description']
+                                )
+                                print(f"       ✓ 已注册到素材库: {material_data['name']}")
+                        except Exception as reg_error:
+                            print(f"       ⚠️  注册到素材库失败: {str(reg_error)}")
 
             return materials
 
@@ -547,7 +603,7 @@ class MaterialRecommender:
                 if self.smart_fetch_config.get('auto_download', True):
                     filepath = self.pexels_fetcher.download_photo(photo, keyword)
                     if filepath:
-                        materials.append({
+                        material_data = {
                             'id': f"pexels_photo_{photo['id']}",
                             'name': f"{keyword}_{photo['id']}",
                             'type': 'image',
@@ -558,7 +614,24 @@ class MaterialRecommender:
                             'match_score': 75,
                             'rating': 4,
                             'used_count': 0
-                        })
+                        }
+                        materials.append(material_data)
+
+                        # ✨ 将素材注册到素材库（持久化）
+                        try:
+                            # 检查是否已存在
+                            existing = self.material_manager.search_materials(f"pexels_photo_{photo['id']}")
+                            if not existing:
+                                self.material_manager.add_material(
+                                    name=material_data['name'],
+                                    file_path=filepath,
+                                    material_type='image',
+                                    tags=material_data['tags'],
+                                    description=material_data['description']
+                                )
+                                print(f"       ✓ 已注册到素材库: {material_data['name']}")
+                        except Exception as reg_error:
+                            print(f"       ⚠️  注册到素材库失败: {str(reg_error)}")
 
             return materials
 
@@ -581,7 +654,7 @@ class MaterialRecommender:
                 if self.smart_fetch_config.get('auto_download', True):
                     filepath = self.unsplash_fetcher.download_photo(photo, keyword, quality='regular')
                     if filepath:
-                        materials.append({
+                        material_data = {
                             'id': f"unsplash_{photo['id']}",
                             'name': f"{keyword}_{photo['id']}",
                             'type': 'image',
@@ -592,7 +665,24 @@ class MaterialRecommender:
                             'match_score': 80,
                             'rating': 5,  # Unsplash质量最高
                             'used_count': 0
-                        })
+                        }
+                        materials.append(material_data)
+
+                        # ✨ 将素材注册到素材库（持久化）
+                        try:
+                            # 检查是否已存在
+                            existing = self.material_manager.search_materials(f"unsplash_{photo['id']}")
+                            if not existing:
+                                self.material_manager.add_material(
+                                    name=material_data['name'],
+                                    file_path=filepath,
+                                    material_type='image',
+                                    tags=material_data['tags'],
+                                    description=material_data['description']
+                                )
+                                print(f"       ✓ 已注册到素材库: {material_data['name']}")
+                        except Exception as reg_error:
+                            print(f"       ⚠️  注册到素材库失败: {str(reg_error)}")
 
             return materials
 
