@@ -87,7 +87,10 @@ make-video/
 
 ### 核心依赖
 - **Python**: 3.8+
-- **OpenAI API**: GPT-4 (脚本生成) + DALL-E 3 (图片生成)
+- **AI服务**:
+  - **OpenAI**: GPT-4 (脚本生成) + DALL-E 3 (图片生成)
+  - **智谱AI (GLM)**: glm-4, glm-4-plus, glm-4-air (脚本生成) ⭐ 新增
+  - **Anthropic**: Claude (可选)
 - **moviepy**: 视频编辑和合成
 - **FFmpeg**: 视频编解码（系统依赖）
 - **Pillow**: 图像处理
@@ -294,8 +297,14 @@ brew install ffmpeg          # macOS
 ```
 
 ### API调用失败
-**问题**: `openai.error.AuthenticationError`
-**解决**: 检查`config/settings.json`中的`api_key`
+**问题**: `openai.error.AuthenticationError` 或 API认证错误
+**解决**:
+- 检查`config/settings.json`中的`api_key`
+- 确认`provider`设置正确 (openai/glm/anthropic)
+- GLM用户需在 https://open.bigmodel.cn/ 获取API Key
+- 确认`base_url`配置正确：
+  - OpenAI: `https://api.openai.com/v1`
+  - GLM: `https://open.bigmodel.cn/api/paas/v4/`
 
 ### 模块导入冲突
 **问题**: 多个`generator.py`导致导入错误

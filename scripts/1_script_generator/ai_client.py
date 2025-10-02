@@ -45,6 +45,8 @@ class AIClient:
             return self._generate_openai(prompt, system_prompt)
         elif self.provider == 'anthropic':
             return self._generate_anthropic(prompt, system_prompt)
+        elif self.provider == 'glm':
+            return self._generate_glm(prompt, system_prompt)
         else:
             raise ValueError(f"不支持的AI提供商: {self.provider}")
 
@@ -149,6 +151,82 @@ class AIClient:
             return result['content'][0]['text']
         except requests.exceptions.RequestException as e:
             raise Exception(f"API调用失败: {str(e)}")
+
+    def _generate_glm(self, prompt: str, system_prompt: Optional[str] = None) -> str:
+        """
+        调用智谱AI GLM API (使用OpenAI兼容接口，带重试机制)
+
+        智谱AI完全兼容OpenAI API格式，只需使用不同的base_url
+        支持的模型：glm-4, glm-4-plus, glm-4-air, glm-4-flash等
+        """
+        headers = {
+            'Authorization': f'Bearer {self.api_key}',
+            'Content-Type': 'application/json'
+        }
+
+        messages = []
+        if system_prompt:
+            messages.append({"role": "system", "content": system_prompt})
+        messages.append({"role": "user", "content": prompt})
+
+        data = {
+            'model': self.model,
+            'messages': messages,
+            'temperature': self.temperature,
+            'max_tokens': self.max_tokens
+        }
+
+        # 重试机制：最多3次，指数退避
+        max_retries = 3
+        retry_delays = [1, 2, 4]  # 秒
+
+        for attempt in range(max_retries):
+            try:
+                response = requests.post(
+                    f'{self.base_url}/chat/completions',
+                    headers=headers,
+                    json=data,
+                    timeout=60
+                )
+                response.raise_for_status()
+                result = response.json()
+                return result['choices'][0]['message']['content']
+
+            except requests.exceptions.Timeout as e:
+                # 超时错误，可重试
+                if attempt < max_retries - 1:
+                    delay = retry_delays[attempt]
+                    print(f"\n⚠️  GLM API请求超时，{delay}秒后重试 ({attempt + 1}/{max_retries})...")
+                    time.sleep(delay)
+                else:
+                    raise Exception(f"GLM API调用超时（已重试{max_retries}次）: {str(e)}")
+
+            except requests.exceptions.ConnectionError as e:
+                # 网络连接错误，可重试
+                if attempt < max_retries - 1:
+                    delay = retry_delays[attempt]
+                    print(f"\n⚠️  网络连接错误，{delay}秒后重试 ({attempt + 1}/{max_retries})...")
+                    time.sleep(delay)
+                else:
+                    raise Exception(f"网络连接失败（已重试{max_retries}次）: {str(e)}")
+
+            except requests.exceptions.HTTPError as e:
+                # HTTP错误，检查是否可重试
+                if e.response.status_code in [429, 500, 502, 503, 504]:
+                    # 限流或服务器错误，可重试
+                    if attempt < max_retries - 1:
+                        delay = retry_delays[attempt]
+                        print(f"\n⚠️  GLM API错误 ({e.response.status_code})，{delay}秒后重试 ({attempt + 1}/{max_retries})...")
+                        time.sleep(delay)
+                    else:
+                        raise Exception(f"GLM API调用失败（已重试{max_retries}次）: {str(e)}")
+                else:
+                    # 其他HTTP错误（如401认证失败），不重试
+                    raise Exception(f"GLM API调用失败: {str(e)}")
+
+            except requests.exceptions.RequestException as e:
+                # 其他请求错误
+                raise Exception(f"GLM API调用失败: {str(e)}")
 
     def generate_json(self, prompt: str, system_prompt: Optional[str] = None) -> Dict[str, Any]:
         """

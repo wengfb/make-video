@@ -54,6 +54,8 @@ class AIImageGenerator:
             return self._generate_dalle(prompt, size, quality, style, n)
         elif self.provider == 'stable-diffusion':
             return self._generate_stable_diffusion(prompt, size, n)
+        elif self.provider == 'cogview':
+            return self._generate_cogview(prompt, size, n)
         else:
             raise ValueError(f"不支持的AI图片生成服务: {self.provider}")
 
@@ -218,6 +220,63 @@ class AIImageGenerator:
 
         except requests.exceptions.RequestException as e:
             raise Exception(f"Stable Diffusion API调用失败: {str(e)}")
+
+    def _generate_cogview(
+        self,
+        prompt: str,
+        size: str,
+        n: int = 1
+    ) -> List[Dict[str, Any]]:
+        """
+        使用智谱AI CogView生成图片
+
+        CogView-4是智谱AI的文生图模型，使用与OpenAI兼容的接口
+        """
+        if not self.api_key:
+            raise ValueError("未配置CogView API密钥")
+
+        base_url = self.ai_image_config.get('base_url', 'https://open.bigmodel.cn/api/paas/v4/')
+        model = self.ai_image_config.get('model', 'cogview-4-250304')
+
+        headers = {
+            'Authorization': f'Bearer {self.api_key}',
+            'Content-Type': 'application/json'
+        }
+
+        # CogView支持的尺寸映射
+        size_map = {
+            '1024x1024': '1024x1024',
+            '1792x1024': '1792x1024',
+            '1024x1792': '1024x1792',
+            '512x512': '512x512',
+            '768x768': '768x768'
+        }
+
+        # 如果尺寸不支持，使用默认值
+        cogview_size = size_map.get(size, '1024x1024')
+
+        data = {
+            'model': model,
+            'prompt': prompt,
+            'size': cogview_size
+        }
+
+        try:
+            # CogView使用 /images/generations 端点
+            response = requests.post(
+                f'{base_url.rstrip("/")}/images/generations',
+                headers=headers,
+                json=data,
+                timeout=120
+            )
+            response.raise_for_status()
+            result = response.json()
+
+            # CogView返回格式与DALL-E相似
+            return result.get('data', [])
+
+        except requests.exceptions.RequestException as e:
+            raise Exception(f"CogView API调用失败: {str(e)}")
 
     def _build_image_prompt(self, narration: str, visual_notes: str) -> str:
         """

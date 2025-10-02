@@ -28,10 +28,10 @@ AI驱动的科普视频制作工具链,从主题选择到**带语音字幕的成
 ## 🎯 项目特色
 
 - **🎨 完整工作流**: 主题生成 → 脚本创作 → 素材管理 → 视频合成，一站式自动化
-- **🤖 AI驱动**: GPT-4脚本生成 + DALL-E图片生成，智能内容创作
+- **🤖 AI驱动**: 支持OpenAI GPT-4、智谱AI GLM-4等多种AI模型，智能内容创作
 - **🎬 专业视频制作**: 基于moviepy的视频编辑，支持转场、文字、音乐
 - **📊 智能推荐**: 自动素材匹配，评分系统，使用统计
-- **🔧 高度可配置**: 灵活的模板系统，丰富的配置选项
+- **🔧 高度可配置**: 灵活的模板系统，丰富的配置选项，支持多AI服务商
 - **📚 完善文档**: 从快速开始到深度指南，覆盖所有使用场景
 
 ## ✨ V1.0-Beta 功能特性
@@ -95,7 +95,7 @@ python init_data.py
 # 根据提示：
 # 1. 创建目录和数据文件
 # 2. 复制 config/settings.example.json 为 config/settings.json
-# 3. 配置OpenAI API密钥
+# 3. 配置AI服务商和API密钥（支持OpenAI或智谱AI GLM）
 # 4. 选择是否创建示例数据
 ```
 
@@ -121,19 +121,41 @@ python check_materials.py
 
 **素材准备指南：** [SETUP_MATERIALS.md](SETUP_MATERIALS.md)
 
-### 步骤5：配置API密钥
+### 步骤5：配置AI服务商和API密钥
 
-编辑 `config/settings.json`:
+编辑 `config/settings.json`，支持多种AI服务商：
 
+**选项A：使用OpenAI（推荐，质量最高）**
 ```json
 {
   "ai": {
-    "api_key": "sk-your-openai-api-key-here"
+    "provider": "openai",
+    "model": "gpt-4",
+    "api_key": "sk-your-openai-api-key-here",
+    "base_url": "https://api.openai.com/v1"
   }
 }
 ```
-
 **获取API密钥：** https://platform.openai.com/api-keys
+
+**选项B：使用智谱AI GLM（国内服务，性价比高）⭐**
+```json
+{
+  "ai": {
+    "provider": "glm",
+    "model": "glm-4",
+    "api_key": "your-glm-api-key-here",
+    "base_url": "https://open.bigmodel.cn/api/paas/v4/"
+  }
+}
+```
+**获取API密钥：** https://open.bigmodel.cn/
+
+**可用GLM模型：**
+- `glm-4`: 通用模型，推荐
+- `glm-4-plus`: 增强版，质量更高
+- `glm-4-air`: 快速版，成本更低
+- `glm-4-flash`: 超快速版，适合简单任务
 
 ### 步骤6：运行程序
 
