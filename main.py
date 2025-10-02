@@ -187,7 +187,7 @@ def interactive_mode():
         print("  10. 素材管理（素材库+AI生成）")
         print("  19. 扫描并注册未注册素材 ⭐ NEW")
         print("\n🎬 视频合成:")
-        print("  11. 从脚本生成视频（自动）")
+        print("  11. 从脚本生成视频（自动素材+TTS检测）")
         print("  11s. 智能视频合成（AI动效） ⭐ NEW")
         print("  12. 预览素材推荐")
         print("  13. 完整工作流（主题→脚本→视频）")
@@ -196,7 +196,7 @@ def interactive_mode():
         print("  15. 管理TTS语音文件")
         print("\n📝 字幕生成 (V5.0):")
         print("  16. 从脚本生成字幕")
-        print("\n🚀 完整AI工作流 (V5.0):")
+        print("\n🚀 完整AI工作流 (V5.0) ⭐ 推荐:")
         print("  17. 从脚本生成完整视频（语音+字幕）")
         print("  18. 全自动工作流（主题→脚本→语音→字幕→视频）")
         print("\n🛠️  其他工具:")
@@ -875,16 +875,65 @@ def compose_video_from_script(composer: VideoComposer, script_gen: ScriptGenerat
     print(f"   预估时长: {info['estimated_duration']:.1f}秒")
     print(f"   预估大小: {info['estimated_file_size_mb']} MB")
 
+    # 自动检测TTS音频 (V5.0+)
+    tts_metadata_path = None
+    script_title = script.get('title', 'untitled').replace(' ', '_')
+
+    # 尝试查找TTS元数据文件
+    import glob
+    possible_tts_files = glob.glob(f'materials/audio/tts/*{script_title}*_metadata.json')
+
+    if possible_tts_files:
+        # 找到TTS音频，自动使用
+        tts_metadata_path = possible_tts_files[0]
+        print(f"\n✅ 检测到TTS音频: {os.path.basename(tts_metadata_path)}")
+    else:
+        print("\n⚠️  未检测到TTS音频文件")
+        generate_tts = input("是否现在生成TTS语音? (y/N): ").strip().lower()
+
+        if generate_tts == 'y':
+            # 生成TTS
+            tts_gen = TTSGenerator()
+
+            # 假设脚本文件路径存在
+            script_path = None
+            if choice == '1' and file_choice.isdigit():
+                idx = int(file_choice) - 1
+                if 0 <= idx < len(script_files):
+                    script_path = script_files[idx]
+            elif choice == '2':
+                script_path = path
+
+            if script_path:
+                print(f"\n🎙️  正在生成TTS语音...")
+                result = tts_gen.generate_speech_from_script(script_path)
+                if result.get('success'):
+                    tts_metadata_path = result.get('metadata_path')
+                    print(f"✅ TTS生成成功")
+                else:
+                    print(f"❌ TTS生成失败: {result.get('error', 'unknown')}")
+
     # 确认合成
     confirm = input("\n开始合成视频? (Y/n): ").strip().lower()
     if confirm == 'n':
         return
 
     try:
-        video_path = composer.compose_from_script(
-            script,
-            auto_select_materials=True
-        )
+        # 根据是否有TTS选择合成方式
+        if tts_metadata_path and os.path.exists(tts_metadata_path):
+            print("\n🎙️  使用TTS音频合成视频...")
+            video_path = composer.compose_from_script(
+                script,
+                auto_select_materials=True,
+                tts_metadata_path=tts_metadata_path,
+                use_tts_audio=True
+            )
+        else:
+            print("\n🎬 合成无声视频（仅画面）...")
+            video_path = composer.compose_from_script(
+                script,
+                auto_select_materials=True
+            )
         print(f"\n🎉 视频已生成: {video_path}")
 
     except Exception as e:
