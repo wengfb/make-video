@@ -658,7 +658,7 @@ class MaterialRecommender:
 
 现在请提取关键词:"""
 
-            result = self.ai_client.generate_text(prompt).strip()
+            result = self.ai_client.generate(prompt).strip()
 
             # 验证结果
             if result and len(result) < 100 and not any(c in result for c in ['。', '，', '\n']):
