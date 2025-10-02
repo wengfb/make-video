@@ -138,5 +138,40 @@
     "description": "智能素材获取: 本地→Pexels→Unsplash→DALL-E四级策略",
     "fallback_to_dalle": false,
     "cache_duration_days": 7
+  },
+
+  "smart_material_selection": {
+    "description": "V5.5新增：AI智能素材审核与生成",
+
+    "_comment_ai_review": "AI审核配置",
+    "enable_ai_review": true,
+    "ai_review_threshold": 70.0,
+    "ai_review_min_candidates": 3,
+
+    "_comment_ai_generation": "AI生成配置",
+    "enable_auto_generation": true,
+    "prefer_video_generation": false,
+    "generation_provider": "cogview",
+
+    "_comment_cost_control": "成本控制",
+    "max_generation_per_video": 5,
+    "max_generation_budget_per_video": 10.0,
+
+    "_comment_caching": "缓存配置",
+    "cache_generated_materials": true,
+    "cache_duration_days": 30,
+
+    "_comment_説明": {
+      "enable_ai_review": "是否启用AI审核素材（推荐开启）",
+      "ai_review_threshold": "AI审核最低可接受分数（0-100，建议70）",
+      "ai_review_min_candidates": "至少审核多少个候选素材",
+      "enable_auto_generation": "当无合格素材时是否自动生成",
+      "prefer_video_generation": "优先生成视频还是图片（暂仅支持图片）",
+      "generation_provider": "生成提供商：cogview（智谱AI）或dalle（OpenAI）",
+      "max_generation_per_video": "单个视频最多生成多少素材",
+      "max_generation_budget_per_video": "单个视频生成预算（人民币）",
+      "cache_generated_materials": "是否缓存生成的素材到素材库",
+      "cache_duration_days": "缓存有效期（天）"
+    }
   }
 }

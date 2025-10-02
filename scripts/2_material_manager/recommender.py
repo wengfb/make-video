@@ -41,6 +41,7 @@ class MaterialRecommender:
             config_path: 配置文件路径
         """
         self.material_manager = material_manager
+        self.config_path = config_path
 
         # 加载配置
         with open(config_path, 'r', encoding='utf-8') as f:
@@ -58,6 +59,10 @@ class MaterialRecommender:
         self.pexels_fetcher = PexelsFetcher(config_path) if PEXELS_AVAILABLE else None
         self.unsplash_fetcher = UnsplashFetcher(config_path) if UNSPLASH_AVAILABLE else None
 
+        # V5.5: 初始化AI审核器和生成器（延迟加载）
+        self._ai_reviewer = None
+        self._ai_generator = None
+
         # 智能获取配置
         self.smart_fetch_config = self.config.get('smart_material_fetch', {
             'enable': True,
@@ -65,6 +70,30 @@ class MaterialRecommender:
             'prefer_videos': True,
             'min_local_results': 3
         })
+
+    @property
+    def ai_reviewer(self):
+        """延迟加载AI审核器"""
+        if self._ai_reviewer is None:
+            try:
+                from ai_reviewer import MaterialReviewerAI
+                self._ai_reviewer = MaterialReviewerAI(self.config_path)
+            except Exception as e:
+                print(f"   ⚠️  AI审核器加载失败: {str(e)}")
+                self._ai_reviewer = None
+        return self._ai_reviewer
+
+    @property
+    def ai_generator(self):
+        """延迟加载AI生成器"""
+        if self._ai_generator is None:
+            try:
+                from ai_content_generator import AIContentGenerator
+                self._ai_generator = AIContentGenerator(self.config_path)
+            except Exception as e:
+                print(f"   ⚠️  AI生成器加载失败: {str(e)}")
+                self._ai_generator = None
+        return self._ai_generator
 
     def recommend_for_script_section(
         self,
@@ -167,7 +196,85 @@ class MaterialRecommender:
         # 重新排序（外部素材可能评分更高）
         unique_materials.sort(key=lambda x: x.get('match_score', 0), reverse=True)
 
-        return unique_materials[:limit]
+        # V5.5: AI审核和生成
+        final_materials = self._apply_ai_review_and_generation(
+            unique_materials[:limit],
+            script_section,
+            material_requirements
+        )
+
+        return final_materials[:limit]
+
+    def _apply_ai_review_and_generation(
+        self,
+        materials: List[Dict[str, Any]],
+        script_section: Dict[str, Any],
+        requirements: Dict[str, Any]
+    ) -> List[Dict[str, Any]]:
+        """
+        应用AI审核和生成（V5.5新增）
+
+        工作流程:
+        1. AI审核现有素材
+        2. 如果没有合格素材，AI生成新素材
+        3. 返回最终素材列表
+
+        Args:
+            materials: 候选素材列表
+            script_section: 脚本章节
+            requirements: 需求分析结果
+
+        Returns:
+            最终素材列表
+        """
+        # 检查是否启用AI审核
+        if not self.config.get('smart_material_selection', {}).get('enable_ai_review', False):
+            return materials
+
+        # 执行AI审核
+        if self.ai_reviewer:
+            try:
+                review_result = self.ai_reviewer.review_materials(materials, script_section)
+
+                # 有合格素材，返回合格列表
+                if review_result['approved']:
+                    approved = review_result['approved']
+                    # 将最佳素材放在首位
+                    if review_result['best_material']:
+                        best = review_result['best_material']
+                        approved = [best] + [m for m in approved if m['id'] != best['id']]
+                    return approved
+
+                # 无合格素材，尝试AI生成
+                if review_result['need_generation'] and self.ai_generator:
+                    print(f"\n   🎨 现有素材不符合要求，尝试AI生成...")
+                    generated = self.ai_generator.generate_material(
+                        script_section,
+                        review_result['generation_prompt']
+                    )
+
+                    if generated:
+                        # 将生成的素材添加到素材库
+                        try:
+                            self.material_manager.add_material(
+                                name=generated['name'],
+                                file_path=generated['file_path'],
+                                material_type=generated['type'],
+                                tags=generated['tags'],
+                                description=generated['description']
+                            )
+                            print(f"   ✅ AI生成的素材已添加到素材库")
+                        except Exception as e:
+                            print(f"   ⚠️  添加到素材库失败: {str(e)}")
+
+                        # 返回生成的素材
+                        return [generated]
+
+            except Exception as e:
+                print(f"   ⚠️  AI审核/生成失败: {str(e)}")
+
+        # 降级：返回原始素材
+        return materials
 
     def recommend_for_full_script(
         self,
@@ -740,10 +847,90 @@ class MaterialRecommender:
 
         return None
 
+    def _generate_smart_tags(self, keyword: str, material_type: str) -> List[str]:
+        """
+        生成智能标签（V5.5新增）
+
+        将搜索关键词拆分为独立标签，并添加分类标签
+
+        Args:
+            keyword: 搜索关键词（如"black hole animation"）
+            material_type: 素材类型（video/image）
+
+        Returns:
+            智能标签列表
+
+        示例:
+            输入: "black hole animation", "video"
+            输出: ["black", "hole", "animation", "black_hole",
+                   "hole_animation", "astronomy", "space", "science", "video"]
+        """
+        tags = []
+
+        # 1. 拆分为独立单词
+        words = [w.strip().lower() for w in keyword.split() if w.strip()]
+        tags.extend(list(set(words)))  # 去重
+
+        # 2. 添加双词组合（重要！提高精确匹配）
+        if len(words) >= 2:
+            for i in range(len(words) - 1):
+                combined = f"{words[i]}_{words[i+1]}"
+                tags.append(combined)
+
+        # 3. 添加合并词（无空格）
+        if len(words) >= 2:
+            tags.append(''.join(words[:2]))  # 如 "blackhole"
+
+        # 4. 自动分类标签
+        category_keywords = {
+            'astronomy': ['space', 'star', 'galaxy', 'planet', 'asteroid', 'comet', 'nebula',
+                         'black', 'hole', 'sun', 'moon', 'cosmos', 'universe', 'stellar'],
+            'biology': ['brain', 'neuron', 'cell', 'DNA', 'gene', 'protein', 'organism',
+                       'bacteria', 'virus', 'blood', 'heart', 'organ', 'tissue'],
+            'physics': ['atom', 'quantum', 'particle', 'energy', 'wave', 'field',
+                       'relativity', 'gravity', 'force', 'motion'],
+            'chemistry': ['molecule', 'chemical', 'reaction', 'element', 'compound',
+                         'bond', 'acid', 'base'],
+            'environment': ['climate', 'weather', 'earth', 'ocean', 'forest', 'pollution',
+                           'ecosystem', 'carbon', 'greenhouse', 'renewable'],
+            'technology': ['computer', 'robot', 'AI', 'digital', 'network', 'data',
+                          'algorithm', 'software']
+        }
+
+        # 匹配分类
+        matched_categories = []
+        for category, keywords_list in category_keywords.items():
+            if any(kw in keyword.lower() for kw in keywords_list):
+                matched_categories.append(category)
+                tags.append(category)
+
+        # 添加通用"science"标签（如果有任何科学分类）
+        if matched_categories:
+            tags.append('science')
+
+        # 5. 添加视觉特征标签
+        visual_keywords = {
+            'animation': ['animation', 'animated', 'motion'],
+            'abstract': ['abstract', 'pattern', 'texture'],
+            'macro': ['macro', 'microscopic', 'close-up', 'micro'],
+            'aerial': ['aerial', 'drone', 'bird-eye', 'top-view'],
+            'timelapse': ['timelapse', 'time-lapse', 'fast']
+        }
+
+        for feature, feature_keywords in visual_keywords.items():
+            if any(kw in keyword.lower() for kw in feature_keywords):
+                tags.append(feature)
+
+        # 6. 添加类型标签
+        tags.append(material_type)
+
+        # 7. 去重并返回
+        return list(set(tags))
+
     def _ai_extract_keyword(self, visual_notes: str, narration: str) -> Optional[str]:
         """
         使用AI智能提取英文关键词
-        V5.3新增
+        V5.5优化：更精确的搜索关键词提取，提高Pexels/Unsplash匹配率
 
         Args:
             visual_notes: 视觉提示
@@ -753,28 +940,53 @@ class MaterialRecommender:
             英文关键词或None
         """
         try:
-            prompt = f"""分析以下科普视频视觉需求,提取最相关的Pexels/Unsplash搜索关键词。
+            prompt = f"""你是素材搜索专家。分析以下科普视频场景，提取最适合在Pexels/Unsplash搜索的英文关键词。
 
-视觉提示: {visual_notes[:200]}
-旁白: {narration[:100]}
+## 场景信息
+视觉需求: {visual_notes[:200]}
+旁白内容: {narration[:100]}
 
-要求:
-1. 提取1-3个最相关的英文关键词
-2. 优先提取具体的视觉元素(如动画、场景、物体)
-3. 关键词要适合在免费素材库搜索
-4. **只返回一行关键词，用空格分隔，不要换行或其他内容**
+## 关键词提取规则
 
-示例格式（重要！）:
-输入: "显示地球温度计动画，温度不断上升"
-输出: earth temperature rising animation
+### 1. 优先级排序
+1) 具体物体/现象（如 black hole, DNA molecule, brain scan）
+2) 动作/状态（如 rotating, glowing, flowing）
+3) 场景类型（如 space, laboratory, nature）
+4) 视觉风格（如 animation, abstract, microscopic）
 
-输入: "汽车在阳光下，车内温度上升"
-输出: car greenhouse effect sunlight
+### 2. 避免过于专业的术语
+❌ 不好: "accretion disk radiation" → ✅ 好: "black hole space"
+❌ 不好: "synaptic vesicles" → ✅ 好: "neuron brain"
+❌ 不好: "anthropogenic forcing" → ✅ 好: "climate change earth"
 
-输入: "展示全球温度变化曲线"
-输出: global temperature chart rising
+### 3. 关键词组合策略
+- 2-4个词为佳（太少→结果太泛，太多→无结果）
+- 核心对象 + 修饰词（如 "space nebula colorful"）
+- 优先视频关键词（加 "motion" "animation" "4k"）
 
-现在请提取关键词（单行输出）:"""
+### 4. 常见科普主题映射
+- 黑洞/时空 → black hole space gravity
+- DNA/基因 → DNA helix molecule biology
+- 大脑/神经 → brain neuron medical
+- 气候变化 → climate earth temperature
+- 原子/粒子 → atom particle physics
+- 细胞 → cell biology microscopic
+- 星系/宇宙 → galaxy space stars
+
+## 输出格式
+**只输出2-4个英文关键词，用空格分隔，不要任何标点、换行或解释**
+
+示例：
+输入: "展示黑洞吸积盘的壮观景象"
+输出: black hole accretion disk space
+
+输入: "DNA双螺旋结构旋转动画"
+输出: DNA helix rotation animation
+
+输入: "大脑神经元突触连接"
+输出: brain neuron synapse connection
+
+现在请提取（单行输出）:"""
 
             result = self.ai_client.generate(prompt).strip()
 
@@ -847,16 +1059,19 @@ class MaterialRecommender:
                 if self.smart_fetch_config.get('auto_download', True):
                     filepath = self.pexels_fetcher.download_video(video, keyword)
                     if filepath:
-                        # 转换为统一格式（V5.4：统一命名）
+                        # V5.5: 使用智能标签系统
+                        smart_tags = self._generate_smart_tags(keyword, 'video')
+
+                        # 转换为统一格式
                         material_data = {
                             'id': material_id,
-                            'name': material_id,  # V5.4: 统一使用material_id作为名称
+                            'name': material_id,
                             'type': 'video',
                             'file_path': filepath,
-                            'tags': [keyword, 'pexels', 'HD'],
+                            'tags': smart_tags,  # V5.5: 智能标签
                             'description': f"Pexels视频: {keyword}",
                             'source': 'pexels',
-                            'match_score': 85,  # 外部视频默认高分
+                            'match_score': 85,
                             'rating': 4,
                             'used_count': 0
                         }
@@ -910,12 +1125,15 @@ class MaterialRecommender:
                 if self.smart_fetch_config.get('auto_download', True):
                     filepath = self.pexels_fetcher.download_photo(photo, keyword)
                     if filepath:
+                        # V5.5: 使用智能标签系统
+                        smart_tags = self._generate_smart_tags(keyword, 'image')
+
                         material_data = {
                             'id': material_id,
-                            'name': material_id,  # V5.4: 统一使用material_id
+                            'name': material_id,
                             'type': 'image',
                             'file_path': filepath,
-                            'tags': [keyword, 'pexels', 'HD'],
+                            'tags': smart_tags,  # V5.5: 智能标签
                             'description': f"Pexels图片: {keyword}",
                             'source': 'pexels',
                             'match_score': 75,
@@ -971,12 +1189,15 @@ class MaterialRecommender:
                 if self.smart_fetch_config.get('auto_download', True):
                     filepath = self.unsplash_fetcher.download_photo(photo, keyword, quality='regular')
                     if filepath:
+                        # V5.5: 使用智能标签系统
+                        smart_tags = self._generate_smart_tags(keyword, 'image')
+
                         material_data = {
                             'id': material_id,
-                            'name': material_id,  # V5.4: 统一使用material_id
+                            'name': material_id,
                             'type': 'image',
                             'file_path': filepath,
-                            'tags': [keyword, 'unsplash', 'HD'],
+                            'tags': smart_tags,  # V5.5: 智能标签
                             'description': photo.get('description', f"Unsplash: {keyword}"),
                             'source': 'unsplash',
                             'match_score': 80,
