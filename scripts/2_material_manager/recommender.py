@@ -1282,6 +1282,11 @@ class MaterialRecommender:
         """
         section_name = script_section.get('section_name', 'N/A')
 
+        # 确保visual_options有priority字段（容错处理）
+        for i, opt in enumerate(visual_options):
+            if 'priority' not in opt:
+                opt['priority'] = i + 1  # 按顺序分配1, 2, 3
+
         # 显示3个优先级方案
         print(f"\n   🎬 视觉方案（多层次）:")
         for opt in visual_options:
