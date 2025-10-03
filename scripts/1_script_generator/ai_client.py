@@ -6,6 +6,7 @@ AI客户端封装
 import json
 import os
 import time
+import re
 from typing import Dict, Any, Optional
 import requests
 
@@ -257,9 +258,162 @@ class AIClient:
                 # 其他请求错误
                 raise Exception(f"GLM API调用失败: {str(e)}")
 
+    def _clean_response(self, response: str) -> str:
+        """
+        清理AI响应中的干扰内容
+
+        Args:
+            response: 原始响应
+
+        Returns:
+            清理后的响应
+        """
+        # 去除BOM和零宽字符
+        response = response.replace('\ufeff', '').replace('\u200b', '').replace('\u200c', '').replace('\u200d', '')
+
+        # 清理常见的AI说明文字模式（中英文）
+        patterns_to_remove = [
+            r'^好的[,，。\s]*',
+            r'^明白[了]?[,，。\s]*',
+            r'^以下是[^：:]*[:：\s]*',
+            r'^这是[^：:]*[:：\s]*',
+            r'^为您生成[^：:]*[:：\s]*',
+            r'^根据您的要求[^：:]*[:：\s]*',
+            r'以上[是就].*$',
+            r'^Here is.*[:：\s]*',
+            r'^Sure.*[:：\s]*',
+            r'^Okay.*[:：\s]*',
+        ]
+
+        for pattern in patterns_to_remove:
+            response = re.sub(pattern, '', response, flags=re.MULTILINE | re.IGNORECASE)
+
+        return response.strip()
+
+    def _extract_json_string(self, response: str) -> Optional[str]:
+        """
+        从响应中提取JSON字符串
+
+        Args:
+            response: 清理后的响应
+
+        Returns:
+            提取的JSON字符串，如果未找到则返回None
+        """
+        import re
+
+        # 方法1: 提取```json代码块
+        if '```json' in response:
+            match = re.search(r'```json\s*(.*?)\s*```', response, re.DOTALL)
+            if match:
+                return match.group(1).strip()
+
+        # 方法2: 提取普通```代码块
+        if '```' in response:
+            match = re.search(r'```\s*(.*?)\s*```', response, re.DOTALL)
+            if match:
+                return match.group(1).strip()
+
+        # 方法3: 提取完整的JSON对象（从第一个{到匹配的}）
+        json_obj_match = re.search(r'\{(?:[^{}]|(?:\{[^{}]*\}))*\}', response, re.DOTALL)
+        if json_obj_match:
+            return json_obj_match.group(0)
+
+        # 方法4: 提取完整的JSON数组（从第一个[到匹配的]）
+        json_arr_match = re.search(r'\[(?:[^\[\]]|(?:\[[^\[\]]*\]))*\]', response, re.DOTALL)
+        if json_arr_match:
+            return json_arr_match.group(0)
+
+        return None
+
+    def _fix_json_string(self, json_str: str) -> str:
+        """
+        尝试修复常见的JSON格式问题
+
+        Args:
+            json_str: JSON字符串
+
+        Returns:
+            修复后的JSON字符串
+        """
+        import re
+
+        # 修复1: 移除注释（单行和多行）
+        json_str = re.sub(r'//.*$', '', json_str, flags=re.MULTILINE)
+        json_str = re.sub(r'/\*.*?\*/', '', json_str, flags=re.DOTALL)
+
+        # 修复2: 将单引号替换为双引号（但要避免字符串内的单引号）
+        # 简化版本：直接替换（可能不完美，但适用于大多数情况）
+        # json_str = json_str.replace("'", '"')
+
+        # 修复3: 移除多余的逗号（如数组或对象最后一个元素后的逗号）
+        json_str = re.sub(r',(\s*[}\]])', r'\1', json_str)
+
+        return json_str
+
+    def _save_debug_response(self, response: str, error: str) -> str:
+        """
+        保存失败的响应到调试文件
+
+        Args:
+            response: 失败的响应内容
+            error: 错误信息
+
+        Returns:
+            调试文件路径
+        """
+        debug_dir = 'debug'
+        os.makedirs(debug_dir, exist_ok=True)
+
+        timestamp = time.strftime('%Y%m%d_%H%M%S')
+        debug_file = os.path.join(debug_dir, f'failed_json_{timestamp}.txt')
+
+        with open(debug_file, 'w', encoding='utf-8') as f:
+            f.write(f"=== 错误信息 ===\n{error}\n\n")
+            f.write(f"=== AI完整响应 ===\n{response}\n")
+
+        return debug_file
+
+    def _try_parse_json(self, response: str) -> Optional[Dict[str, Any]]:
+        """
+        尝试解析JSON（包含清理、提取、修复）
+
+        Args:
+            response: AI响应
+
+        Returns:
+            解析成功的JSON字典，失败返回None
+        """
+        # 步骤1: 清理响应
+        cleaned = self._clean_response(response)
+
+        # 步骤2: 尝试直接解析
+        try:
+            return json.loads(cleaned)
+        except json.JSONDecodeError:
+            pass
+
+        # 步骤3: 提取JSON字符串
+        json_str = self._extract_json_string(cleaned)
+        if not json_str:
+            return None
+
+        # 步骤4: 尝试解析提取的JSON
+        try:
+            return json.loads(json_str)
+        except json.JSONDecodeError:
+            pass
+
+        # 步骤5: 修复并再次尝试解析
+        try:
+            fixed_json = self._fix_json_string(json_str)
+            return json.loads(fixed_json)
+        except json.JSONDecodeError:
+            return None
+
     def generate_json(self, prompt: str, system_prompt: Optional[str] = None) -> Dict[str, Any]:
         """
-        生成JSON格式的内容
+        生成JSON格式的内容（带重试机制）
 
         Args:
             prompt: 用户提示词
@@ -268,32 +422,36 @@ class AIClient:
         Returns:
             解析后的JSON字典
         """
-        response = self.generate(prompt, system_prompt)
+        import re
 
-        # 尝试提取JSON内容（处理可能包含markdown代码块的情况）
-        try:
-            # 尝试直接解析
-            return json.loads(response)
-        except json.JSONDecodeError as e1:
-            # 尝试提取代码块中的JSON
-            try:
-                if '```json' in response:
-                    json_str = response.split('```json')[1].split('```')[0].strip()
-                    return json.loads(json_str)
-                elif '```' in response:
-                    json_str = response.split('```')[1].split('```')[0].strip()
-                    return json.loads(json_str)
-                else:
-                    # 最后尝试：查找第一个{或[，提取到最后一个}或]
-                    import re
-                    json_match = re.search(r'[\{\[].*[\}\]]', response, re.DOTALL)
-                    if json_match:
-                        json_str = json_match.group(0)
-                        return json.loads(json_str)
-                    else:
-                        raise ValueError("响应中未找到JSON格式内容")
-            except (json.JSONDecodeError, IndexError, ValueError) as e2:
-                # 所有解析尝试失败，返回错误信息
-                error_msg = f"无法解析JSON响应。原始错误: {str(e1)}\n响应内容: {response[:500]}..."
-                print(f"\n❌ JSON解析失败: {error_msg}")
-                raise ValueError(error_msg)
+        # 第一次尝试：正常生成
+        response = self.generate(prompt, system_prompt)
+        parsed = self._try_parse_json(response)
+        if parsed:
+            return parsed
+
+        # 第一次重试：请求AI修正格式
+        print("⚠️  JSON格式有误，请求AI修正...")
+        fix_prompt = f"请将以下内容修正为标准JSON格式，只返回纯JSON，不要任何说明文字、前言或后缀：\n\n{response}"
+        response_fixed = self.generate(fix_prompt)
+        parsed = self._try_parse_json(response_fixed)
+        if parsed:
+            print("✅ AI修正成功")
+            return parsed
+
+        # 第二次重试：更严格的指令
+        print("⚠️  再次尝试修正...")
+        strict_prompt = f"严格要求：只返回纯JSON格式数据，确保使用双引号、无注释、无多余逗号。修正此内容：\n\n{response}"
+        response_strict = self.generate(strict_prompt)
+        parsed = self._try_parse_json(response_strict)
+        if parsed:
+            print("✅ AI严格修正成功")
+            return parsed
+
+        # 所有重试失败，保存调试信息并抛出异常
+        error_msg = "JSON解析失败（已重试2次AI修正）"
+        debug_file = self._save_debug_response(response_strict, error_msg)
+
+        final_error = f"{error_msg}\n调试文件已保存: {debug_file}\n响应预览: {response_strict[:300]}..."
+        print(f"\n❌ {final_error}")
+        raise ValueError(final_error)

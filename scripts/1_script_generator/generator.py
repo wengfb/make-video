@@ -47,7 +47,7 @@ class ScriptGenerator:
         custom_requirements: Optional[str] = None
     ) -> Dict[str, Any]:
         """
-        生成视频脚本
+        生成视频脚本（带重试机制）
 
         Args:
             topic: 视频主题
@@ -59,6 +59,8 @@ class ScriptGenerator:
         Returns:
             生成的脚本字典
         """
+        import time
+
         # 获取模板
         if template_name not in self.templates['script_templates']:
             raise ValueError(f"模板 '{template_name}' 不存在")
@@ -87,24 +89,42 @@ class ScriptGenerator:
 
         print(f"\n🤖 正在生成脚本...\n主题: {topic}\n模板: {template['name']}\n")
 
-        # 调用AI生成
-        try:
-            script_data = self.ai_client.generate_json(prompt)
+        # 业务层重试机制
+        max_retries = 2
+        for attempt in range(max_retries):
+            try:
+                # 调用AI生成
+                script_data = self.ai_client.generate_json(prompt)
 
-            # 添加元数据
-            script_data['metadata'] = {
-                'topic': topic,
-                'template': template_name,
-                'duration': duration,
-                'audience': audience,
-                'generated_at': datetime.now().isoformat(),
-                'generator_version': self.config['project']['version']
-            }
+                # 验证数据结构
+                if 'sections' not in script_data:
+                    raise ValueError("AI返回的脚本缺少sections字段")
 
-            return script_data
+                if not isinstance(script_data['sections'], list):
+                    raise ValueError(f"AI返回的sections不是数组，类型: {type(script_data['sections'])}")
 
-        except Exception as e:
-            raise Exception(f"脚本生成失败: {str(e)}")
+                if not script_data['sections']:
+                    raise ValueError("AI返回的sections数组为空")
+
+                # 添加元数据
+                script_data['metadata'] = {
+                    'topic': topic,
+                    'template': template_name,
+                    'duration': duration,
+                    'audience': audience,
+                    'generated_at': datetime.now().isoformat(),
+                    'generator_version': self.config['project']['version']
+                }
+
+                return script_data
+
+            except Exception as e:
+                if attempt < max_retries - 1:
+                    print(f"⚠️  生成失败，{2}秒后重试 ({attempt + 1}/{max_retries})...")
+                    print(f"   错误: {str(e)}")
+                    time.sleep(2)
+                else:
+                    raise Exception(f"脚本生成失败（已重试{max_retries}次）: {str(e)}")
 
     def generate_hook(self, topic: str) -> str:
         """

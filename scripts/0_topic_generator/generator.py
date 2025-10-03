@@ -45,7 +45,7 @@ class TopicGenerator:
         custom_requirements: Optional[str] = None
     ) -> List[Dict[str, Any]]:
         """
-        生成主题建议列表
+        生成主题建议列表（带重试机制）
 
         Args:
             field: 科学领域（物理、化学、生物等）
@@ -57,6 +57,8 @@ class TopicGenerator:
         Returns:
             主题列表
         """
+        import time
+
         # 构建提示词
         prompt = self._build_topic_prompt(field, audience, count, style, custom_requirements)
 
@@ -67,34 +69,49 @@ class TopicGenerator:
             print(f"   受众: {self._translate_audience(audience)}")
         print(f"   数量: {count}\n")
 
-        try:
-            # 调用AI生成
-            response = self.ai_client.generate_json(prompt)
-            topics = response.get('topics', [])
+        # 业务层重试机制
+        max_retries = 2
+        for attempt in range(max_retries):
+            try:
+                # 调用AI生成
+                response = self.ai_client.generate_json(prompt)
+                topics = response.get('topics', [])
 
-            # 添加元数据和ID
-            for i, topic in enumerate(topics, 1):
-                topic['id'] = self._generate_topic_id()
-                topic['generated_at'] = datetime.now().isoformat()
-                topic['field'] = field or topic.get('field', 'general')
-                topic['target_audience'] = audience or topic.get('target_audience', 'general_public')
+                # 验证数据结构
+                if not topics:
+                    raise ValueError("AI返回的topics数组为空")
 
-                # 确保必要字段存在
-                topic.setdefault('title', f'主题 {i}')
-                topic.setdefault('description', '')
-                topic.setdefault('difficulty', 'medium')
-                topic.setdefault('estimated_popularity', 'medium')
-                topic.setdefault('key_points', [])
-                topic.setdefault('visual_potential', 'medium')
+                if not isinstance(topics, list):
+                    raise ValueError(f"AI返回的topics不是数组，类型: {type(topics)}")
 
-            return topics
+                # 添加元数据和ID
+                for i, topic in enumerate(topics, 1):
+                    topic['id'] = self._generate_topic_id()
+                    topic['generated_at'] = datetime.now().isoformat()
+                    topic['field'] = field or topic.get('field', 'general')
+                    topic['target_audience'] = audience or topic.get('target_audience', 'general_public')
 
-        except Exception as e:
-            raise Exception(f"主题生成失败: {str(e)}")
+                    # 确保必要字段存在
+                    topic.setdefault('title', f'主题 {i}')
+                    topic.setdefault('description', '')
+                    topic.setdefault('difficulty', 'medium')
+                    topic.setdefault('estimated_popularity', 'medium')
+                    topic.setdefault('key_points', [])
+                    topic.setdefault('visual_potential', 'medium')
+
+                return topics
+
+            except Exception as e:
+                if attempt < max_retries - 1:
+                    print(f"⚠️  生成失败，{2}秒后重试 ({attempt + 1}/{max_retries})...")
+                    print(f"   错误: {str(e)}")
+                    time.sleep(2)
+                else:
+                    raise Exception(f"主题生成失败（已重试{max_retries}次）: {str(e)}")
 
     def generate_trending_topics(self, count: int = 10) -> List[Dict[str, Any]]:
         """
-        生成热门/趋势主题
+        生成热门/趋势主题（带重试机制）
 
         Args:
             count: 生成数量
@@ -102,24 +119,37 @@ class TopicGenerator:
         Returns:
             主题列表
         """
+        import time
+
         prompt = self.templates['prompt_templates']['trending_topics'].format(count=count)
 
         print(f"\n🔥 正在分析热门趋势，生成主题建议...\n")
 
-        try:
-            response = self.ai_client.generate_json(prompt)
-            topics = response.get('topics', [])
+        max_retries = 2
+        for attempt in range(max_retries):
+            try:
+                response = self.ai_client.generate_json(prompt)
+                topics = response.get('topics', [])
 
-            # 添加元数据
-            for topic in topics:
-                topic['id'] = self._generate_topic_id()
-                topic['generated_at'] = datetime.now().isoformat()
-                topic['is_trending'] = True
+                # 验证数据结构
+                if not topics:
+                    raise ValueError("AI返回的topics数组为空")
 
-            return topics
+                # 添加元数据
+                for topic in topics:
+                    topic['id'] = self._generate_topic_id()
+                    topic['generated_at'] = datetime.now().isoformat()
+                    topic['is_trending'] = True
 
-        except Exception as e:
-            raise Exception(f"热门主题生成失败: {str(e)}")
+                return topics
+
+            except Exception as e:
+                if attempt < max_retries - 1:
+                    print(f"⚠️  生成失败，{2}秒后重试 ({attempt + 1}/{max_retries})...")
+                    print(f"   错误: {str(e)}")
+                    time.sleep(2)
+                else:
+                    raise Exception(f"热门主题生成失败（已重试{max_retries}次）: {str(e)}")
 
     def expand_topic(self, topic_title: str) -> Dict[str, Any]:
         """
