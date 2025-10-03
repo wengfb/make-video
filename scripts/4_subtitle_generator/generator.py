@@ -35,6 +35,48 @@ class SubtitleGenerator:
             print(f"⚠️  加载配置文件失败: {str(e)}")
             return {}
 
+    def _sanitize_filename(self, filename: str) -> str:
+        """
+        清理文件名中的特殊字符，确保文件系统和FFmpeg兼容性
+
+        Args:
+            filename: 原始文件名
+
+        Returns:
+            清理后的安全文件名
+        """
+        # 移除/替换不安全的文件名字符
+        # 这些字符可能导致：
+        # 1. 文件系统错误（Windows/Linux/macOS）
+        # 2. FFmpeg filter解析失败
+        unsafe_chars = [
+            ':', '：',  # 冒号（英文/中文）
+            "'", '"',   # 引号（单/双）
+            '<', '>',   # 尖括号
+            '|',        # 管道符
+            '?', '*',   # 通配符
+            '/', '\\',  # 路径分隔符
+        ]
+
+        for char in unsafe_chars:
+            filename = filename.replace(char, '')
+
+        # 替换空格为下划线
+        filename = filename.replace(' ', '_')
+
+        # 移除连续下划线
+        while '__' in filename:
+            filename = filename.replace('__', '_')
+
+        # 移除首尾下划线
+        filename = filename.strip('_')
+
+        # 确保文件名不为空
+        if not filename:
+            filename = 'untitled'
+
+        return filename
+
     def generate_from_script(self, script_path: str,
                             audio_metadata_path: Optional[str] = None,
                             output_name: Optional[str] = None,
@@ -66,7 +108,7 @@ class SubtitleGenerator:
 
             # 确定输出文件名
             if output_name is None:
-                output_name = script.get("title", "untitled").replace(" ", "_")
+                output_name = self._sanitize_filename(script.get("title", "untitled"))
 
             # 读取音频时长(如果提供)
             audio_durations = None

@@ -336,8 +336,17 @@ class FFmpegTimelineRenderer:
         style = style or {}
 
         # 转义字幕文件路径（FFmpeg filter需要）
-        # 在Windows和Linux上，路径中的反斜杠和冒号需要转义
-        escaped_path = subtitle_file.replace('\\', '\\\\').replace(':', '\\:')
+        # FFmpeg subtitles filter中的特殊字符必须转义，包括：
+        # 1. 反斜杠 \ → \\（必须最先转义）
+        # 2. 冒号（英文/中文）: → \:
+        # 3. 单引号 ' → \'（避免与force_style参数的引号冲突）
+        # 4. 方括号 [ ] → \[ \]
+        escaped_path = subtitle_file.replace('\\', '\\\\')  # 反斜杠必须最先转义
+        escaped_path = escaped_path.replace(':', '\\:')    # 英文冒号
+        escaped_path = escaped_path.replace('：', '\\:')   # 中文冒号
+        escaped_path = escaped_path.replace("'", "\\'")    # 单引号
+        escaped_path = escaped_path.replace('[', '\\[')    # 左方括号
+        escaped_path = escaped_path.replace(']', '\\]')    # 右方括号
 
         # 构建ASS样式覆盖
         fontsize = style.get("fontsize", "48")
