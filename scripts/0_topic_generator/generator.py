@@ -13,6 +13,16 @@ import os
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '1_script_generator'))
 from ai_client import AIClient
 
+# 导入主题管理器 - 使用动态加载避免相对导入问题
+import importlib.util
+manager_spec = importlib.util.spec_from_file_location(
+    "topic_manager_internal",
+    os.path.join(os.path.dirname(__file__), "manager.py")
+)
+topic_manager_module = importlib.util.module_from_spec(manager_spec)
+manager_spec.loader.exec_module(topic_manager_module)
+TopicManager = topic_manager_module.TopicManager
+
 
 class TopicGenerator:
     """智能主题生成器"""
@@ -35,6 +45,9 @@ class TopicGenerator:
 
         # 初始化AI客户端
         self.ai_client = AIClient(self.config['ai'])
+
+        # 初始化主题管理器 - 用于历史避重
+        self.topic_manager = TopicManager()
 
     def generate_topics(
         self,
@@ -59,8 +72,14 @@ class TopicGenerator:
         """
         import time
 
-        # 构建提示词
-        prompt = self._build_topic_prompt(field, audience, count, style, custom_requirements)
+        # 读取历史主题（最近20个）用于避重
+        historical_titles = self._get_historical_titles(limit=20)
+
+        # 构建提示词（包含历史避重）
+        prompt = self._build_topic_prompt(
+            field, audience, count, style,
+            custom_requirements, historical_titles
+        )
 
         print(f"\n🤖 正在生成主题建议...")
         if field:
@@ -249,7 +268,8 @@ class TopicGenerator:
         audience: Optional[str],
         count: int,
         style: Optional[str],
-        custom_requirements: Optional[str]
+        custom_requirements: Optional[str],
+        historical_titles: Optional[List[str]] = None
     ) -> str:
         """构建主题生成提示词"""
         prompt_template = self.templates['prompt_templates']['topic_generation']
@@ -265,6 +285,12 @@ class TopicGenerator:
             count=count,
             style=style_desc
         )
+
+        # 添加历史避重提示
+        if historical_titles and len(historical_titles) > 0:
+            prompt += f"\n\n📝 历史避重要求：\n以下是已经生成过的主题，请务必生成完全不同的新主题，不要与以下任何主题相似或重复：\n"
+            for i, title in enumerate(historical_titles, 1):
+                prompt += f"{i}. {title}\n"
 
         if custom_requirements:
             prompt += f"\n\n额外要求：\n{custom_requirements}"
@@ -325,3 +351,24 @@ class TopicGenerator:
             {"id": "general_public", "name": "普通大众", "description": "适合所有年龄段"},
             {"id": "professionals", "name": "专业人士", "description": "深度专业内容"},
         ]
+
+    def _get_historical_titles(self, limit: int = 20) -> List[str]:
+        """
+        获取历史主题标题列表（用于避重）
+
+        Args:
+            limit: 获取数量限制
+
+        Returns:
+            历史主题标题列表
+        """
+        try:
+            # 获取最近的主题
+            topics = self.topic_manager.list_topics(sort_by='date', limit=limit)
+            # 提取标题
+            titles = [topic.get('title', '') for topic in topics if topic.get('title')]
+            return titles
+        except Exception as e:
+            # 如果读取失败，返回空列表（不影响主流程）
+            print(f"⚠️  读取历史主题失败: {str(e)}")
+            return []
