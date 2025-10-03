@@ -11,10 +11,15 @@ from datetime import datetime
 from typing import Any, Dict, List, Optional, Tuple
 from concurrent.futures import ThreadPoolExecutor, as_completed
 import threading
+import tempfile
+import shutil
 
 # 修复相对导入问题 - 导入VideoEditor
 sys.path.insert(0, os.path.dirname(__file__))
 from editor import VideoEditor
+
+# V5.6: 导入项目归档器
+from project_archiver import ProjectArchiver
 
 # 导入素材推荐器
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '2_material_manager'))
@@ -60,18 +65,19 @@ class VideoComposer:
         use_tts_audio: bool = True
     ) -> str:
         """
-        根据脚本自动合成视频 (V5.0 - 支持TTS和字幕)
+        根据脚本自动合成视频
+        V5.6: 新增项目归档功能，将所有相关文件整理到项目文件夹
 
         Args:
             script: 脚本字典（包含sections）
             auto_select_materials: 是否自动选择素材
-            output_filename: 输出文件名
+            output_filename: 输出文件名（已废弃，使用脚本标题）
             tts_metadata_path: TTS音频元数据JSON文件路径 (V5.0新增)
             subtitle_file: 字幕文件路径(.srt/.ass) (V5.0新增)
             use_tts_audio: 是否使用TTS音频替代BGM (V5.0新增)
 
         Returns:
-            视频文件路径
+            项目文件夹路径（V5.6变更：之前返回视频路径）
         """
         print(f"\n🎬 开始合成视频: {script.get('title', '未命名')}")
         print("=" * 60)
@@ -80,56 +86,132 @@ class VideoComposer:
         if not sections:
             raise ValueError("脚本没有章节内容")
 
+        # V5.6: 创建项目文件夹和归档器
+        timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+        script_title = script.get('title', 'video')
+        safe_title = "".join(c for c in script_title if c.isalnum() or c in (' ', '-', '_')).strip()
+        project_name = f"{safe_title}_{timestamp}"
+        project_folder = os.path.join('output/projects', project_name)
+
+        archiver = ProjectArchiver(project_folder)
+        archiver.create_project_structure()
+
+        # 保存脚本副本
+        archiver.save_script(script)
+
         # 🚀 多线程优化: 并行处理所有章节
         print(f"\n🚀 使用多线程并行处理 {len(sections)} 个章节...")
 
-        # 首先批量推荐素材（如果需要）
+        # V5.6: 批量推荐素材（保存完整推荐信息）
         section_materials = {}
+        section_recommendations = {}  # 新增：保存所有推荐（用于报告）
+
         if auto_select_materials:
             print("🔍 批量推荐素材...")
             with ThreadPoolExecutor(max_workers=min(8, len(sections))) as executor:
                 future_to_section = {
-                    executor.submit(self._recommend_material_for_section, i, section): i
+                    executor.submit(self._recommend_material_for_section_v2, i, section): i
                     for i, section in enumerate(sections)
                 }
 
                 for future in as_completed(future_to_section):
                     section_idx = future_to_section[future]
                     try:
-                        material_path, material_info = future.result()
+                        material_path, material_info, all_recommendations = future.result()
                         section_materials[section_idx] = (material_path, material_info)
+                        section_recommendations[section_idx] = all_recommendations
                     except Exception as e:
                         print(f"   ⚠️  章节 {section_idx + 1} 素材推荐失败: {str(e)}")
                         section_materials[section_idx] = (None, None)
+                        section_recommendations[section_idx] = []
 
         # 并行创建视频片段
         print("🎬 并行创建视频片段...")
-        # 输出文件
-        if output_filename is None:
-            timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
-            script_title = script.get('title', 'video')
-            # 清理文件名
-            safe_title = "".join(c for c in script_title if c.isalnum() or c in (' ', '-', '_')).strip()
-            output_filename = f"{safe_title}_{timestamp}.mp4"
-
-        output_path = os.path.join(self.editor.output_dir, output_filename)
+        # V5.6: 视频输出到临时路径
+        temp_video_path = os.path.join(tempfile.gettempdir(), f"{project_name}.mp4")
 
         print(f"\n💾 导出视频...")
 
         total_duration, segment_count = self._render_with_ffmpeg(
             sections=sections,
             section_materials=section_materials,
-            output_path=output_path,
+            output_path=temp_video_path,
             use_tts_audio=use_tts_audio,
             tts_metadata_path=tts_metadata_path,
             subtitle_file=subtitle_file,
         )
 
-        print(f"\n✅ 视频合成完成: {output_path}")
+        print(f"\n✅ 视频合成完成")
         print(f"   时长: {total_duration:.1f}秒")
         print(f"   片段数: {segment_count}")
 
-        return output_path
+        # V5.6: 归档所有相关文件
+        print(f"\n📦 归档项目文件...")
+
+        # 复制素材文件
+        archiver.copy_materials(section_materials, sections)
+
+        # 生成素材选择报告
+        archiver.generate_selection_report(
+            script,
+            section_materials,
+            section_recommendations
+        )
+
+        # 复制音频文件
+        if use_tts_audio and tts_metadata_path:
+            archiver.copy_audio_files(tts_metadata_path)
+
+        # 复制字幕文件
+        if subtitle_file:
+            archiver.copy_subtitle_file(subtitle_file)
+
+        # 保存合成日志
+        archiver.save_composition_log({
+            'timestamp': timestamp,
+            'duration': total_duration,
+            'segments': segment_count,
+            'use_tts_audio': use_tts_audio,
+            'bgm_enabled': self.config.get('tts', {}).get('enable_bgm_mixing', True),
+            'config': {
+                'resolution': self.video_config.get('resolution'),
+                'fps': self.video_config.get('fps'),
+                'codec': self.video_config.get('codec'),
+                'bitrate': self.video_config.get('bitrate')
+            }
+        })
+
+        # 移动视频到项目文件夹
+        final_video_path = os.path.join(project_folder, 'video.mp4')
+        shutil.move(temp_video_path, final_video_path)
+
+        # 生成项目元数据
+        archiver.generate_metadata(
+            script,
+            {
+                'duration': total_duration,
+                'segments': segment_count,
+                'resolution': self.video_config.get('resolution'),
+                'fps': self.video_config.get('fps')
+            }
+        )
+
+        print(f"\n🎉 项目归档完成!")
+        print(f"   📁 项目文件夹: {project_folder}")
+        print(f"   🎬 视频文件: {final_video_path}")
+        print(f"\n   包含文件:")
+        print(f"      • video.mp4 - 最终视频")
+        print(f"      • script.json - 脚本文件")
+        print(f"      • material_selection_report.json/txt - 素材选择报告")
+        print(f"      • materials/ - 使用的素材副本")
+        if use_tts_audio and tts_metadata_path:
+            print(f"      • audio/ - TTS音频文件")
+        if subtitle_file:
+            print(f"      • subtitles.* - 字幕文件")
+        print(f"      • composition_log.txt - 合成日志")
+        print(f"      • project_metadata.json - 项目元数据")
+
+        return project_folder
 
     def _build_segments(
         self,
@@ -466,7 +548,8 @@ class VideoComposer:
 
     def preview_material_recommendations(self, script: Dict[str, Any]) -> List[Dict[str, Any]]:
         """
-        预览脚本各章节的素材推荐（V5.4增强：详细展示匹配信息）
+        预览脚本各章节的素材推荐
+        V5.6: 支持visual_options多层次场景展示
 
         Args:
             script: 脚本字典
@@ -483,30 +566,95 @@ class VideoComposer:
         for i, section in enumerate(sections, 1):
             section_name = section.get('section_name', f'章节{i}')
             narration = section.get('narration', '')[:60]
-            visual_notes = section.get('visual_notes', '')
 
             print(f"\n📌 {i}. {section_name}")
             print(f"   旁白: {narration}...")
-            if visual_notes:
-                print(f"   视觉: {visual_notes[:60]}...")
 
+            # V5.6: 显示visual_options（如果有）
+            visual_options = section.get('visual_options', [])
+            if visual_options:
+                print(f"\n   🎬 视觉方案（3个层次）:")
+                for opt in visual_options:
+                    priority = opt.get('priority', 0)
+                    desc = opt.get('description', '')
+                    complexity = opt.get('complexity', 'unknown')
+                    source = opt.get('suggested_source', '')
+
+                    # 优先级emoji
+                    priority_emoji = {1: "🌟", 2: "⭐", 3: "✨"}.get(priority, "•")
+
+                    print(f"      {priority_emoji} Priority {priority} ({complexity})")
+                    print(f"         {desc}")
+                    print(f"         建议来源: {source}")
+            else:
+                # 显示旧格式的visual_notes
+                visual_notes = section.get('visual_notes', '')
+                if visual_notes:
+                    print(f"   视觉: {visual_notes[:80]}...")
+
+            print()  # 空行
+
+            # 获取推荐素材
             recommendations = self.recommender.recommend_for_script_section(
                 section,
                 limit=5
             )
 
             if recommendations:
-                print(f"\n   💎 找到 {len(recommendations)} 个候选素材:")
+                # V5.6: 增强显示格式
+                best_rec = recommendations[0]
+                matched_priority = best_rec.get('matched_priority', 0)
+                semantic_score = best_rec.get('match_score', 0)
+
+                # 评分等级
+                if semantic_score >= 80:
+                    score_level = "优秀"
+                    score_color = "✅"
+                elif semantic_score >= 60:
+                    score_level = "良好"
+                    score_color = "⚠️ "
+                else:
+                    score_level = "一般"
+                    score_color = "❌"
+
+                print(f"   🎯 智能匹配结果:")
+                if matched_priority:
+                    print(f"      ✅ 采用 Priority {matched_priority} 方案")
+                print(f"      {score_color} 语义匹配度: {semantic_score:.0f}% ({score_level})")
+
+                # 匹配/缺失元素
+                matched_elements = best_rec.get('matched_elements', [])
+                missing_elements = best_rec.get('missing_elements', [])
+                if matched_elements:
+                    print(f"      ✅ 匹配元素: {', '.join(matched_elements)}")
+                if missing_elements:
+                    print(f"      ❌ 缺失元素: {', '.join(missing_elements)}")
+
+                print(f"\n   💎 推荐素材:")
                 for j, rec in enumerate(recommendations, 1):
-                    # V5.4: 增强显示格式
                     marker = "⭐" if j == 1 else "  "
                     type_icon = "🎥" if rec['type'] == 'video' else "🖼️"
                     print(f"   {marker} {j}) {type_icon} {rec['name']}")
-                    print(f"      📊 匹配度: {rec['match_score']:.0f}% | 类型: {rec['type']}")
-                    print(f"      🏷️  标签: {', '.join(rec.get('tags', [])[:3])}")
-                    print(f"      ✨ 原因: {rec.get('match_reason', 'N/A')}")
 
-                    # 显示文件路径（简化）
+                    # 匹配信息
+                    rec_score = rec.get('match_score', 0)
+                    rec_priority = rec.get('matched_priority')
+                    print(f"      📊 匹配度: {rec_score:.0f}%", end="")
+                    if rec_priority:
+                        print(f" | Priority {rec_priority}", end="")
+                    print(f" | 类型: {rec['type']}")
+
+                    # 标签
+                    tags = rec.get('tags', [])[:3]
+                    if tags:
+                        print(f"      🏷️  标签: {', '.join(tags)}")
+
+                    # AI分析原因
+                    match_reason = rec.get('match_reason', '')
+                    if match_reason:
+                        print(f"      💡 AI分析: {match_reason[:80]}...")
+
+                    # 文件路径
                     file_path = rec.get('file_path', '')
                     if file_path:
                         file_name = os.path.basename(file_path)
@@ -516,6 +664,7 @@ class VideoComposer:
                         print()  # 素材间空行
             else:
                 print("   ⚠️  未找到合适素材")
+                print("   💡 建议: 使用AI生成或手动上传素材")
 
             all_recommendations.append({
                 'section_index': i - 1,
@@ -525,6 +674,10 @@ class VideoComposer:
 
         print("\n" + "=" * 80)
         print(f"💡 提示: ⭐标记的素材将被自动选择用于视频合成")
+        print(f"📋 操作选项:")
+        print(f"   [1] 使用推荐素材直接合成")
+        print(f"   [2] 查看单个章节详情")
+        print(f"   [3] 手动选择素材")
 
         return all_recommendations
 
@@ -653,6 +806,25 @@ class VideoComposer:
             return best_material['file_path'], best_material
         else:
             return None, None
+
+    def _recommend_material_for_section_v2(self, section_idx: int, section: Dict[str, Any]) -> Tuple[Optional[str], Optional[Dict], List[Dict]]:
+        """
+        为单个章节推荐素材（V5.6增强版 - 返回完整推荐列表用于归档）
+
+        Args:
+            section_idx: 章节索引
+            section: 章节字典
+
+        Returns:
+            (素材路径, 最佳素材信息, 所有推荐列表) 元组
+        """
+        recommendations = self.recommender.recommend_for_script_section(section, limit=5)
+
+        if recommendations:
+            best_material = recommendations[0]
+            return best_material['file_path'], best_material, recommendations
+        else:
+            return None, None, []
 
     def _create_clip_from_material(self, material_path: Optional[str], duration: float):
         """

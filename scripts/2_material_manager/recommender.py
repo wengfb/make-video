@@ -63,6 +63,9 @@ class MaterialRecommender:
         self._ai_reviewer = None
         self._ai_generator = None
 
+        # V5.6: 初始化AI语义匹配器（延迟加载）
+        self._ai_semantic_matcher = None
+
         # 智能获取配置
         self.smart_fetch_config = self.config.get('smart_material_fetch', {
             'enable': True,
@@ -95,6 +98,18 @@ class MaterialRecommender:
                 self._ai_generator = None
         return self._ai_generator
 
+    @property
+    def ai_semantic_matcher(self):
+        """延迟加载AI语义匹配器（V5.6）"""
+        if self._ai_semantic_matcher is None:
+            try:
+                from ai_semantic_matcher import AISemanticMatcher
+                self._ai_semantic_matcher = AISemanticMatcher(self.config_path)
+            except Exception as e:
+                print(f"   ⚠️  AI语义匹配器加载失败: {str(e)}")
+                self._ai_semantic_matcher = None
+        return self._ai_semantic_matcher
+
     def recommend_for_script_section(
         self,
         script_section: Dict[str, Any],
@@ -103,6 +118,7 @@ class MaterialRecommender:
     ) -> List[Dict[str, Any]]:
         """
         为脚本章节推荐素材 (智能四级获取)
+        V5.6: 支持visual_options多层次场景匹配
 
         Args:
             script_section: 脚本章节数据
@@ -112,15 +128,28 @@ class MaterialRecommender:
         Returns:
             推荐素材列表
         """
+        section_name = script_section.get('section_name', 'N/A')
+        print(f"\n🔍 分析素材需求...")
+        print(f"   章节: {section_name}")
+
+        # V5.6: 检查是否有visual_options（新格式）
+        visual_options = script_section.get('visual_options', [])
+        if visual_options:
+            # 使用新的多层次场景匹配
+            return self._recommend_with_visual_options(
+                script_section,
+                visual_options,
+                limit,
+                enable_smart_fetch
+            )
+
+        # 降级到旧版匹配逻辑（兼容旧脚本）
         # 提取关键信息
         narration = script_section.get('narration', '')
         visual_notes = script_section.get('visual_notes', '')
 
         # 分析需要的素材类型
         material_requirements = self._analyze_requirements(narration, visual_notes)
-
-        print(f"\n🔍 分析素材需求...")
-        print(f"   章节: {script_section.get('section_name', 'N/A')}")
 
         recommendations = []
 
@@ -1231,3 +1260,203 @@ class MaterialRecommender:
         except Exception as e:
             print(f"       ❌ Unsplash获取失败: {str(e)}")
             return []
+
+    def _recommend_with_visual_options(
+        self,
+        script_section: Dict[str, Any],
+        visual_options: List[Dict[str, Any]],
+        limit: int,
+        enable_smart_fetch: bool
+    ) -> List[Dict[str, Any]]:
+        """
+        使用visual_options多层次场景进行匹配（V5.6新增）
+
+        Args:
+            script_section: 脚本章节
+            visual_options: 3个优先级的视觉方案
+            limit: 返回数量
+            enable_smart_fetch: 是否启用外部素材获取
+
+        Returns:
+            推荐素材列表
+        """
+        section_name = script_section.get('section_name', 'N/A')
+
+        # 显示3个优先级方案
+        print(f"\n   🎬 视觉方案（多层次）:")
+        for opt in visual_options:
+            priority = opt.get('priority', 0)
+            desc = opt.get('description', '')[:60]
+            complexity = opt.get('complexity', 'unknown')
+            source = opt.get('suggested_source', '')
+            print(f"      Priority {priority} ({complexity}): {desc}... [{source}]")
+
+        # 1. 收集候选素材（合并所有优先级的关键词）
+        all_keywords = []
+        for opt in visual_options:
+            all_keywords.extend(opt.get('keywords', []))
+
+        # 去重关键词
+        all_keywords = list(set(all_keywords))
+
+        # 搜索本地素材库
+        print(f"\n   📁 [1/4] 搜索本地素材库 (关键词: {', '.join(all_keywords[:5])}...)")
+        candidates = []
+
+        for keyword in all_keywords:
+            materials = self.material_manager.search_materials(keyword)
+            candidates.extend(materials)
+
+        # 去重
+        seen_ids = set()
+        unique_candidates = []
+        for mat in candidates:
+            mat_id = mat.get('id')
+            if mat_id not in seen_ids:
+                seen_ids.add(mat_id)
+                unique_candidates.append(mat)
+
+        print(f"       ✓ 找到 {len(unique_candidates)} 个本地素材")
+
+        # 2. 外部素材获取（如果需要）
+        if enable_smart_fetch and len(unique_candidates) < self.smart_fetch_config.get('min_local_results', 3):
+            print(f"       ⚠️  本地素材不足，尝试外部获取...")
+
+            # 按优先级尝试搜索
+            for opt in sorted(visual_options, key=lambda x: x.get('priority', 999)):
+                if len(unique_candidates) >= limit:
+                    break
+
+                keywords = opt.get('keywords', [])
+                search_keyword = ' '.join(keywords[:3])  # 使用前3个关键词
+
+                # Pexels视频
+                if self.pexels_fetcher and self.smart_fetch_config.get('prefer_videos', True):
+                    pexels_videos = self._fetch_from_pexels_videos(
+                        search_keyword,
+                        count=max(2, limit - len(unique_candidates))
+                    )
+                    unique_candidates.extend(pexels_videos)
+
+                # Pexels图片
+                if len(unique_candidates) < limit and self.pexels_fetcher:
+                    pexels_photos = self._fetch_from_pexels_photos(
+                        search_keyword,
+                        count=max(1, limit - len(unique_candidates))
+                    )
+                    unique_candidates.extend(pexels_photos)
+
+        # 3. AI语义匹配（核心）
+        print(f"\n   🧠 [AI语义匹配] 分析 {len(unique_candidates)} 个候选素材...")
+
+        if not unique_candidates:
+            print("       ❌ 未找到任何候选素材")
+            return []
+
+        # 使用AI语义匹配器
+        if self.ai_semantic_matcher:
+            try:
+                match_result = self.ai_semantic_matcher.match_scene_to_materials(
+                    visual_options,
+                    unique_candidates,
+                    section_name
+                )
+
+                # 解析匹配结果
+                best_material = match_result.get('best_material')
+                selected_priority = match_result.get('selected_priority', 3)
+                semantic_score = match_result.get('semantic_score', 0)
+                reasoning = match_result.get('reasoning', '')
+
+                if best_material:
+                    print(f"       ✅ 最佳匹配: {best_material.get('name', 'N/A')}")
+                    print(f"       📊 匹配Priority {selected_priority} | 语义评分: {semantic_score}%")
+                    print(f"       💡 AI分析: {reasoning[:80]}...")
+
+                    # 为最佳素材添加匹配信息
+                    best_material['match_score'] = semantic_score
+                    best_material['matched_priority'] = selected_priority
+                    best_material['match_reason'] = reasoning
+                    best_material['matched_elements'] = match_result.get('matched_elements', [])
+                    best_material['missing_elements'] = match_result.get('missing_elements', [])
+
+                    # 构建返回列表（最佳素材+备选）
+                    result_materials = [best_material]
+
+                    # 添加备选素材
+                    for alt in match_result.get('alternative_matches', [])[:limit-1]:
+                        alt_material = alt.get('material')
+                        if alt_material:
+                            alt_material['match_score'] = alt.get('score', 0)
+                            alt_material['matched_priority'] = alt.get('priority', 3)
+                            alt_material['match_reason'] = alt.get('reasoning', '')
+                            result_materials.append(alt_material)
+
+                    return result_materials[:limit]
+                else:
+                    print("       ⚠️  AI未找到合适匹配")
+
+            except Exception as e:
+                print(f"       ⚠️  AI语义匹配异常: {str(e)}")
+
+        # 4. 降级到传统评分（AI失败时）
+        print("       ⚠️  使用传统关键词匹配...")
+        return self._fallback_keyword_matching(visual_options, unique_candidates, limit)
+
+    def _fallback_keyword_matching(
+        self,
+        visual_options: List[Dict[str, Any]],
+        materials: List[Dict[str, Any]],
+        limit: int
+    ) -> List[Dict[str, Any]]:
+        """
+        降级匹配逻辑（AI失败时使用关键词匹配）
+
+        Args:
+            visual_options: 视觉方案
+            materials: 候选素材
+            limit: 返回数量
+
+        Returns:
+            推荐素材列表
+        """
+        # 提取所有关键词（优先级加权）
+        weighted_keywords = []
+        for opt in visual_options:
+            priority = opt.get('priority', 3)
+            keywords = opt.get('keywords', [])
+            weight = 4 - priority  # Priority 1权重3，Priority 2权重2，Priority 3权重1
+            weighted_keywords.extend([(kw.lower(), weight) for kw in keywords])
+
+        # 计算每个素材的评分
+        scored_materials = []
+        for mat in materials:
+            score = 0
+            mat_text = (
+                mat.get('name', '') + ' ' +
+                mat.get('description', '') + ' ' +
+                ' '.join(mat.get('tags', []))
+            ).lower()
+
+            # 关键词匹配
+            for keyword, weight in weighted_keywords:
+                if keyword in mat_text:
+                    score += 10 * weight
+
+            # 类型加分
+            if mat.get('type') == 'video':
+                score += 20
+
+            # 来源加分
+            if mat.get('source') in ['pexels', 'unsplash']:
+                score += 10
+
+            mat['match_score'] = score
+            mat['matched_priority'] = 3  # 降级默认Priority 3
+            mat['match_reason'] = '关键词匹配（降级模式）'
+
+            scored_materials.append(mat)
+
+        # 排序并返回
+        scored_materials.sort(key=lambda x: x.get('match_score', 0), reverse=True)
+        return scored_materials[:limit]

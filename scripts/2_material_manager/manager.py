@@ -132,6 +132,14 @@ class MaterialManager:
             'rating': None
         }
 
+        # V5.6: 自动语义分析（如果是新下载的素材）
+        if not material.get('semantic_metadata'):
+            try:
+                from material_semantic_analyzer import auto_analyze_new_material
+                material = auto_analyze_new_material(material)
+            except Exception as e:
+                print(f"   ⚠️  语义分析失败: {str(e)}")
+
         # 保存到数据库
         materials = self._load_json(self.materials_db)
         materials.append(material)
