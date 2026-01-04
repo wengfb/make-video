@@ -1,0 +1,235 @@
+{% extends "base.html" %}
+
+{% block title %}首页 - 科普视频自动化制作系统{% endblock %}
+
+{% block content %}
+<div x-data="dashboard()">
+    <!-- 欢迎横幅 -->
+    <div class="bg-gradient-to-r from-purple-500 to-indigo-500 text-white rounded-lg shadow-xl p-8 mb-8">
+        <h1 class="text-4xl font-bold mb-2">🎬 欢迎使用科普视频自动化制作系统</h1>
+        <p class="text-xl text-purple-100">AI驱动的端到端视频生产平台</p>
+        <p class="text-sm text-purple-200 mt-4">从主题生成到成品视频，全程自动化</p>
+    </div>
+
+    <!-- 快速开始卡片 -->
+    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+        <!-- 生成主题 -->
+        <a href="/topics" class="group">
+            <div class="bg-white rounded-lg shadow-md hover:shadow-xl transition p-6 border-l-4 border-purple-500">
+                <div class="flex items-center mb-4">
+                    <div class="text-4xl mr-3">📝</div>
+                    <h3 class="text-xl font-bold text-gray-800">生成主题</h3>
+                </div>
+                <p class="text-gray-600 text-sm">AI生成科普视频主题建议</p>
+                <div class="mt-4 text-purple-600 text-sm font-semibold group-hover:text-purple-800">
+                    开始使用 →
+                </div>
+            </div>
+        </a>
+
+        <!-- 生成脚本 -->
+        <a href="/scripts" class="group">
+            <div class="bg-white rounded-lg shadow-md hover:shadow-xl transition p-6 border-l-4 border-blue-500">
+                <div class="flex items-center mb-4">
+                    <div class="text-4xl mr-3">📜</div>
+                    <h3 class="text-xl font-bold text-gray-800">生成脚本</h3>
+                </div>
+                <p class="text-gray-600 text-sm">从主题自动生成视频脚本</p>
+                <div class="mt-4 text-blue-600 text-sm font-semibold group-hover:text-blue-800">
+                    开始使用 →
+                </div>
+            </div>
+        </a>
+
+        <!-- 合成视频 -->
+        <a href="/videos" class="group">
+            <div class="bg-white rounded-lg shadow-md hover:shadow-xl transition p-6 border-l-4 border-green-500">
+                <div class="flex items-center mb-4">
+                    <div class="text-4xl mr-3">🎥</div>
+                    <h3 class="text-xl font-bold text-gray-800">合成视频</h3>
+                </div>
+                <p class="text-gray-600 text-sm">一键生成带语音字幕的视频</p>
+                <div class="mt-4 text-green-600 text-sm font-semibold group-hover:text-green-800">
+                    开始使用 →
+                </div>
+            </div>
+        </a>
+
+        <!-- 素材管理 -->
+        <a href="/materials" class="group">
+            <div class="bg-white rounded-lg shadow-md hover:shadow-xl transition p-6 border-l-4 border-orange-500">
+                <div class="flex items-center mb-4">
+                    <div class="text-4xl mr-3">🎨</div>
+                    <h3 class="text-xl font-bold text-gray-800">素材管理</h3>
+                </div>
+                <p class="text-gray-600 text-sm">浏览和管理素材库</p>
+                <div class="mt-4 text-orange-600 text-sm font-semibold group-hover:text-orange-800">
+                    开始使用 →
+                </div>
+            </div>
+        </a>
+    </div>
+
+    <!-- 统计信息 -->
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+        <div class="bg-white rounded-lg shadow-md p-6">
+            <div class="flex items-center justify-between">
+                <div>
+                    <p class="text-gray-500 text-sm">主题总数</p>
+                    <p class="text-3xl font-bold text-purple-600" x-text="stats.topics">-</p>
+                </div>
+                <div class="text-5xl opacity-20">📝</div>
+            </div>
+        </div>
+
+        <div class="bg-white rounded-lg shadow-md p-6">
+            <div class="flex items-center justify-between">
+                <div>
+                    <p class="text-gray-500 text-sm">脚本总数</p>
+                    <p class="text-3xl font-bold text-blue-600" x-text="stats.scripts">-</p>
+                </div>
+                <div class="text-5xl opacity-20">📜</div>
+            </div>
+        </div>
+
+        <div class="bg-white rounded-lg shadow-md p-6">
+            <div class="flex items-center justify-between">
+                <div>
+                    <p class="text-gray-500 text-sm">视频总数</p>
+                    <p class="text-3xl font-bold text-green-600" x-text="stats.videos">-</p>
+                </div>
+                <div class="text-5xl opacity-20">🎥</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 最近任务 -->
+    <div class="bg-white rounded-lg shadow-md p-6">
+        <h2 class="text-2xl font-bold mb-4">📋 最近任务</h2>
+
+        <div x-show="loading" class="text-center py-8">
+            <div class="animate-spin rounded-full h-12 w-12 border-b-2 border-purple-600 mx-auto"></div>
+            <p class="text-gray-600 mt-4">加载中...</p>
+        </div>
+
+        <div x-show="!loading && recentTasks.length === 0" class="text-center py-8 text-gray-500">
+            <p>暂无任务记录</p>
+            <p class="text-sm mt-2">开始创建你的第一个视频吧！</p>
+        </div>
+
+        <div x-show="!loading && recentTasks.length > 0" class="space-y-3">
+            <template x-for="task in recentTasks" :key="task.id">
+                <div class="flex items-center justify-between p-4 bg-gray-50 rounded-lg hover:bg-gray-100 transition">
+                    <div class="flex items-center space-x-4">
+                        <div class="text-2xl">
+                            <span x-show="task.type === 'generate_topics'">📝</span>
+                            <span x-show="task.type === 'generate_script'">📜</span>
+                            <span x-show="task.type === 'compose_video'">🎥</span>
+                            <span x-show="task.type === 'generate_tts'">🔊</span>
+                        </div>
+                        <div>
+                            <p class="font-semibold" x-text="task.message"></p>
+                            <p class="text-sm text-gray-500" x-text="formatTime(task.created_at)"></p>
+                        </div>
+                    </div>
+                    <div>
+                        <span class="px-3 py-1 rounded-full text-sm font-semibold"
+                              :class="{
+                                  'bg-green-100 text-green-800': task.status === 'completed',
+                                  'bg-yellow-100 text-yellow-800': task.status === 'running',
+                                  'bg-red-100 text-red-800': task.status === 'failed',
+                                  'bg-gray-100 text-gray-800': task.status === 'pending'
+                              }" x-text="statusText(task.status)"></span>
+                    </div>
+                </div>
+            </template>
+        </div>
+
+        <div class="mt-4 text-center">
+            <a href="/history" class="text-purple-600 hover:text-purple-800 font-semibold">
+                查看所有历史 →
+            </a>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+function dashboard() {
+    return {
+        stats: {
+            topics: 0,
+            scripts: 0,
+            videos: 0
+        },
+        recentTasks: [],
+        loading: true,
+
+        async init() {
+            // 加载统计数据
+            await this.loadStats();
+            // 加载最近任务
+            await this.loadRecentTasks();
+            this.loading = false;
+        },
+
+        async loadStats() {
+            try {
+                // 并行加载所有统计
+                const [topicsRes, scriptsRes, videosRes] = await Promise.all([
+                    fetch('/api/topics/stats/summary'),
+                    fetch('/api/scripts/stats/summary'),
+                    fetch('/api/videos/stats/summary')
+                ]);
+
+                const topicsData = await topicsRes.json();
+                const scriptsData = await scriptsRes.json();
+                const videosData = await videosRes.json();
+
+                if (topicsData.success) {
+                    this.stats.topics = topicsData.stats.total_topics || 0;
+                }
+                if (scriptsData.success) {
+                    this.stats.scripts = scriptsData.stats.total_scripts || 0;
+                }
+                if (videosData.success) {
+                    this.stats.videos = videosData.stats.total_videos || 0;
+                }
+            } catch (error) {
+                console.error('加载统计数据失败:', error);
+            }
+        },
+
+        async loadRecentTasks() {
+            try {
+                const response = await fetch('/api/history/recent?limit=5');
+                const data = await response.json();
+
+                if (data.success) {
+                    this.recentTasks = data.tasks || [];
+                }
+            } catch (error) {
+                console.error('加载最近任务失败:', error);
+            }
+        },
+
+        formatTime(isoString) {
+            if (!isoString) return '';
+            const date = new Date(isoString);
+            return date.toLocaleString('zh-CN');
+        },
+
+        statusText(status) {
+            const statusMap = {
+                'completed': '已完成',
+                'running': '进行中',
+                'failed': '失败',
+                'pending': '等待中'
+            };
+            return statusMap[status] || status;
+        }
+    };
+}
+</script>
+{% endblock %}

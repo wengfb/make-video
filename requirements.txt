@@ -54,15 +54,26 @@ python-dotenv>=1.0.0  # 环境变量管理
 #    - OpenAI API Key (用于GPT和DALL-E)
 #
 # ============================================
+# Web界面依赖 (V5.1新增)
+# ============================================
+fastapi>=0.104.0         # Web框架
+uvicorn[standard]>=0.24.0 # ASGI服务器（含websockets）
+websockets>=12.0         # WebSocket支持
+jinja2>=3.1.2            # 模板引擎
+python-multipart>=0.0.6  # 表单数据解析
+aiofiles>=23.2.1         # 异步文件操作
+pydantic>=2.0.0          # 数据验证
+
+# ============================================
 # 安装说明
 # ============================================
-# 完整安装:
+# 完整安装（包含Web界面）:
 #   pip install -r requirements.txt
 #
-# 最小安装（仅脚本生成）:
-#   pip install requests openai
+# 仅CLI使用（不包含Web）:
+#   pip install requests openai moviepy Pillow numpy edge-tts pysrt
 #
-# 视频制作安装（推荐）:
-#   pip install requests openai moviepy Pillow numpy
+# 仅Web界面开发:
+#   pip install fastapi uvicorn jinja2 python-multipart aiofiles
 #
 # ============================================

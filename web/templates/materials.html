@@ -1,0 +1,416 @@
+{% extends "base.html" %}
+
+{% block title %}素材管理 - 科普视频自动化制作系统{% endblock %}
+
+{% block content %}
+<div x-data="materialManager()" x-init="init()">
+    <!-- 页面标题 -->
+    <div class="mb-8">
+        <h1 class="text-3xl font-bold text-gray-800 mb-2">🎨 素材管理</h1>
+        <p class="text-gray-600">管理和组织视频素材</p>
+    </div>
+
+    <!-- 操作栏 -->
+    <div class="card mb-6">
+        <div class="flex flex-wrap gap-4 items-center justify-between">
+            <!-- 搜索和过滤 -->
+            <div class="flex flex-wrap gap-4 flex-1">
+                <div class="relative flex-1 min-w-[200px]">
+                    <input
+                        type="text"
+                        x-model="searchQuery"
+                        @input="debounceSearch"
+                        placeholder="搜索素材..."
+                        class="form-input !pl-10 !pr-4 !py-2"
+                        style="padding-left: 2.75rem !important;"
+                    >
+                    <svg class="absolute left-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-gray-400 pointer-events-none" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path>
+                    </svg>
+                </div>
+
+                <select x-model="filterType" @change="loadMaterials" class="form-select">
+                    <option value="">全部类型</option>
+                    <option value="image">图片</option>
+                    <option value="video">视频</option>
+                    <option value="audio">音频</option>
+                </select>
+
+                <select x-model="filterCategory" @change="loadMaterials" class="form-select">
+                    <option value="">全部分类</option>
+                    <template x-for="cat in categories" :key="cat">
+                        <option :value="cat" x-text="cat"></option>
+                    </template>
+                </select>
+            </div>
+
+            <!-- 上传按钮 -->
+            <button
+                @click="showUploadModal = true"
+                class="btn btn-primary"
+            >
+                📤 上传素材
+            </button>
+        </div>
+
+        <!-- 统计信息 -->
+        <div class="mt-4 flex gap-6 text-sm text-gray-600">
+            <span>总计: <strong class="text-gray-800" x-text="stats.total"></strong></span>
+            <span>图片: <strong class="text-blue-600" x-text="stats.images"></strong></span>
+            <span>视频: <strong class="text-green-600" x-text="stats.videos"></strong></span>
+            <span>音频: <strong class="text-purple-600" x-text="stats.audio"></strong></span>
+        </div>
+    </div>
+
+    <!-- 素材网格 -->
+    <div x-show="loading" class="text-center py-16">
+        <div class="animate-spin rounded-full h-12 w-12 border-b-2 border-purple-600 mx-auto"></div>
+        <p class="text-gray-600 mt-4">加载中...</p>
+    </div>
+
+    <div x-show="!loading && materials.length === 0" class="text-center py-16">
+        <div class="text-6xl mb-4">🎨</div>
+        <h3 class="text-xl font-bold text-gray-800 mb-2">暂无素材</h3>
+        <p class="text-gray-600">点击"上传素材"开始添加</p>
+    </div>
+
+    <div x-show="!loading && materials.length > 0" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+        <template x-for="material in materials" :key="material.id">
+            <div class="card overflow-hidden hover:shadow-lg transition">
+                <!-- 预览图 -->
+                <div class="aspect-video bg-gray-100 relative">
+                    <template x-if="material.type === 'image'">
+                        <img :src="material.preview_url || material.file_path" :alt="material.name" class="w-full h-full object-cover">
+                    </template>
+                    <template x-if="material.type === 'video'">
+                        <div class="w-full h-full flex items-center justify-center bg-gray-200">
+                            <svg class="w-16 h-16 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z"></path>
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                            </svg>
+                        </div>
+                    </template>
+                    <template x-if="material.type === 'audio'">
+                        <div class="w-full h-full flex items-center justify-center bg-gray-200">
+                            <svg class="w-16 h-16 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19V6l12-3v13M9 19c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zm12-3c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zM9 10l12-3"></path>
+                            </svg>
+                        </div>
+                    </template>
+
+                    <!-- 类型标签 -->
+                    <div class="absolute top-2 right-2">
+                        <span class="px-2 py-1 rounded text-xs font-semibold"
+                              :class="{
+                                  'bg-blue-100 text-blue-800': material.type === 'image',
+                                  'bg-green-100 text-green-800': material.type === 'video',
+                                  'bg-purple-100 text-purple-800': material.type === 'audio'
+                              }" x-text="material.type"></span>
+                    </div>
+                </div>
+
+                <!-- 素材信息 -->
+                <div class="p-4">
+                    <h3 class="font-bold text-gray-800 mb-2 truncate" x-text="material.name"></h3>
+
+                    <!-- 标签 -->
+                    <div class="flex flex-wrap gap-1 mb-3">
+                        <template x-for="tag in (material.tags || []).slice(0, 3)" :key="tag">
+                            <span class="tag tag-gray text-xs" x-text="tag"></span>
+                        </template>
+                    </div>
+
+                    <!-- 统计 -->
+                    <div class="flex items-center justify-between text-xs text-gray-500 mb-3">
+                        <span x-text="material.category || '未分类'"></span>
+                        <span>评分: <span x-text="material.rating || 0"></span></span>
+                    </div>
+
+                    <!-- 操作按钮 -->
+                    <div class="flex gap-2">
+                        <button
+                            @click="viewMaterial(material)"
+                            class="btn btn-secondary flex-1 text-sm"
+                        >
+                            查看
+                        </button>
+                        <button
+                            @click="deleteMaterial(material.id)"
+                            class="btn btn-danger text-sm"
+                        >
+                            删除
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </template>
+    </div>
+
+    <!-- 分页 -->
+    <div x-show="!loading && materials.length > 0" class="mt-8 flex justify-center gap-2">
+        <button
+            @click="prevPage"
+            :disabled="currentPage === 1"
+            class="btn btn-secondary"
+            :class="{'opacity-50': currentPage === 1}"
+        >
+            上一页
+        </button>
+        <span class="px-4 py-2 bg-white rounded" x-text="`${currentPage} / ${totalPages}`"></span>
+        <button
+            @click="nextPage"
+            :disabled="currentPage >= totalPages"
+            class="btn btn-secondary"
+            :class="{'opacity-50': currentPage >= totalPages}"
+        >
+            下一页
+        </button>
+    </div>
+
+    <!-- 上传模态框 -->
+    <div x-show="showUploadModal" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+    <div class="bg-white rounded-lg shadow-xl max-w-md w-full mx-4" @click.away="showUploadModal = false">
+        <div class="p-6">
+            <h2 class="text-2xl font-bold mb-4">上传素材</h2>
+
+            <form @submit.prevent="uploadMaterial">
+                <!-- 文件选择 -->
+                <div class="form-group">
+                    <label class="form-label">选择文件</label>
+                    <input
+                        type="file"
+                        @change="uploadForm.file = $event.target.files[0]"
+                        accept="image/*,video/*,audio/*"
+                        class="form-input"
+                        required
+                    >
+                    <p class="text-sm text-gray-500 mt-1" x-show="uploadForm.file" x-text="uploadForm.file?.name || ''"></p>
+                </div>
+
+                <!-- 名称 -->
+                <div class="form-group">
+                    <label class="form-label">素材名称</label>
+                    <input
+                        type="text"
+                        x-model="uploadForm.name"
+                        class="form-input"
+                        placeholder="输入素材名称"
+                        required
+                    >
+                </div>
+
+                <!-- 分类 -->
+                <div class="form-group">
+                    <label class="form-label">分类</label>
+                    <select x-model="uploadForm.category" class="form-select">
+                        <option value="">选择分类</option>
+                        <option value="nature">自然</option>
+                        <option value="technology">科技</option>
+                        <option value="abstract">抽象</option>
+                        <option value="people">人物</option>
+                        <option value="other">其他</option>
+                    </select>
+                </div>
+
+                <!-- 标签 -->
+                <div class="form-group">
+                    <label class="form-label">标签（逗号分隔）</label>
+                    <input
+                        type="text"
+                        x-model="uploadForm.tags"
+                        class="form-input"
+                        placeholder="例如：自然,森林,绿色"
+                    >
+                </div>
+
+                <!-- 按钮 -->
+                <div class="flex gap-3 mt-6">
+                    <button
+                        type="button"
+                        @click="showUploadModal = false"
+                        class="btn btn-secondary flex-1"
+                    >
+                        取消
+                    </button>
+                    <button
+                        type="submit"
+                        :disabled="uploading"
+                        class="btn btn-primary flex-1"
+                    >
+                        <span x-show="!uploading">上传</span>
+                        <span x-show="uploading">上传中...</span>
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+function materialManager() {
+    return {
+        materials: [],
+        loading: false,
+        searchQuery: '',
+        filterType: '',
+        filterCategory: '',
+        categories: ['nature', 'technology', 'abstract', 'people', 'other'],
+        currentPage: 1,
+        pageSize: 20,
+        total: 0,
+        stats: {
+            total: 0,
+            images: 0,
+            videos: 0,
+            audio: 0
+        },
+        showUploadModal: false,
+        uploading: false,
+        uploadForm: {
+            file: null,
+            name: '',
+            category: '',
+            tags: ''
+        },
+        searchTimeout: null,
+
+        get totalPages() {
+            return Math.ceil(this.total / this.pageSize);
+        },
+
+        async init() {
+            await this.loadMaterials();
+            await this.loadStats();
+        },
+
+        async loadMaterials() {
+            this.loading = true;
+
+            try {
+                const params = new URLSearchParams({
+                    limit: this.pageSize,
+                    offset: (this.currentPage - 1) * this.pageSize
+                });
+
+                if (this.searchQuery) params.append('search', this.searchQuery);
+                if (this.filterType) params.append('type', this.filterType);
+                if (this.filterCategory) params.append('category', this.filterCategory);
+
+                const response = await fetch(`/api/materials/?${params}`);
+                const data = await response.json();
+
+                if (data.success) {
+                    this.materials = data.materials || [];
+                    this.total = data.total || this.materials.length;
+                }
+            } catch (error) {
+                console.error('加载素材失败:', error);
+                window.appUtils?.showToast('加载素材失败', 'error');
+            } finally {
+                this.loading = false;
+            }
+        },
+
+        async loadStats() {
+            try {
+                const response = await fetch('/api/materials/stats/summary');
+                const data = await response.json();
+
+                if (data.success) {
+                    this.stats = data.stats || this.stats;
+                }
+            } catch (error) {
+                console.error('加载统计失败:', error);
+            }
+        },
+
+        debounceSearch() {
+            clearTimeout(this.searchTimeout);
+            this.searchTimeout = setTimeout(() => {
+                this.currentPage = 1;
+                this.loadMaterials();
+            }, 500);
+        },
+
+        async uploadMaterial() {
+            this.uploading = true;
+
+            try {
+                const formData = new FormData();
+                formData.append('file', this.uploadForm.file);
+                formData.append('name', this.uploadForm.name);
+                formData.append('category', this.uploadForm.category);
+                formData.append('tags', this.uploadForm.tags);
+
+                const response = await fetch('/api/materials/upload', {
+                    method: 'POST',
+                    body: formData
+                });
+
+                const data = await response.json();
+
+                if (data.success) {
+                    window.appUtils?.showToast('素材上传成功', 'success');
+                    this.showUploadModal = false;
+                    this.uploadForm = { file: null, name: '', category: '', tags: '' };
+                    await this.loadMaterials();
+                    await this.loadStats();
+                } else {
+                    throw new Error(data.error || '上传失败');
+                }
+            } catch (error) {
+                console.error('上传失败:', error);
+                window.appUtils?.showToast(error.message, 'error');
+            } finally {
+                this.uploading = false;
+            }
+        },
+
+        viewMaterial(material) {
+            // TODO: 实现素材预览
+            window.appUtils?.showToast('预览功能开发中', 'info');
+        },
+
+        async deleteMaterial(materialId) {
+            if (!confirm('确定要删除这个素材吗？')) return;
+
+            try {
+                const response = await fetch(`/api/materials/${materialId}`, {
+                    method: 'DELETE'
+                });
+
+                const data = await response.json();
+
+                if (data.success) {
+                    window.appUtils?.showToast('素材删除成功', 'success');
+                    await this.loadMaterials();
+                    await this.loadStats();
+                } else {
+                    throw new Error(data.error || '删除失败');
+                }
+            } catch (error) {
+                console.error('删除失败:', error);
+                window.appUtils?.showToast(error.message, 'error');
+            }
+        },
+
+        prevPage() {
+            if (this.currentPage > 1) {
+                this.currentPage--;
+                this.loadMaterials();
+            }
+        },
+
+        nextPage() {
+            if (this.currentPage < this.totalPages) {
+                this.currentPage++;
+                this.loadMaterials();
+            }
+        }
+    };
+}
+</script>
+{% endblock %}

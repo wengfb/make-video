@@ -1,0 +1,399 @@
+{% extends "base.html" %}
+
+{% block title %}历史记录 - 科普视频自动化制作系统{% endblock %}
+
+{% block content %}
+<div x-data="historyManager()" x-init="init()">
+    <!-- 页面标题 -->
+    <div class="mb-8">
+        <h1 class="text-3xl font-bold text-gray-800 mb-2">📋 历史记录</h1>
+        <p class="text-gray-600">查看和管理所有任务历史</p>
+    </div>
+
+    <!-- 过滤器和统计 -->
+    <div class="card mb-6">
+        <div class="flex flex-wrap gap-4 items-center justify-between">
+            <!-- 过滤器 -->
+            <div class="flex gap-4">
+                <select x-model="filterStatus" @change="loadHistory" class="form-select">
+                    <option value="">全部状态</option>
+                    <option value="completed">已完成</option>
+                    <option value="running">进行中</option>
+                    <option value="failed">失败</option>
+                    <option value="pending">等待中</option>
+                </select>
+
+                <select x-model="filterType" @change="loadHistory" class="form-select">
+                    <option value="">全部类型</option>
+                    <option value="generate_topics">生成主题</option>
+                    <option value="generate_script">生成脚本</option>
+                    <option value="compose_video">合成视频</option>
+                    <option value="generate_tts">语音合成</option>
+                </select>
+            </div>
+
+            <!-- 清空历史 -->
+            <button
+                @click="clearHistory"
+                class="btn btn-danger text-sm"
+            >
+                🗑️ 清空历史
+            </button>
+        </div>
+
+        <!-- 统计 -->
+        <div class="mt-4 flex gap-6 text-sm">
+            <span class="text-gray-600">
+                总计: <strong class="text-gray-800" x-text="stats.total"></strong>
+            </span>
+            <span class="text-green-600">
+                成功: <strong x-text="stats.completed"></strong>
+            </span>
+            <span class="text-red-600">
+                失败: <strong x-text="stats.failed"></strong>
+            </span>
+            <span class="text-yellow-600">
+                进行中: <strong x-text="stats.running"></strong>
+            </span>
+        </div>
+    </div>
+
+    <!-- 加载状态 -->
+    <div x-show="loading" class="text-center py-16">
+        <div class="animate-spin rounded-full h-12 w-12 border-b-2 border-purple-600 mx-auto"></div>
+        <p class="text-gray-600 mt-4">加载中...</p>
+    </div>
+
+    <!-- 空状态 -->
+    <div x-show="!loading && tasks.length === 0" class="text-center py-16">
+        <div class="text-6xl mb-4">📋</div>
+        <h3 class="text-xl font-bold text-gray-800 mb-2">暂无历史记录</h3>
+        <p class="text-gray-600">完成任务后会在这里显示</p>
+    </div>
+
+    <!-- 任务列表 -->
+    <div x-show="!loading && tasks.length > 0" class="space-y-4">
+        <template x-for="task in tasks" :key="task.id">
+            <div class="card hover:shadow-lg transition">
+                <div class="flex items-start justify-between">
+                    <!-- 左侧：任务信息 -->
+                    <div class="flex-1">
+                        <div class="flex items-center gap-3 mb-2">
+                            <!-- 类型图标 -->
+                            <div class="text-2xl">
+                                <span x-show="task.type === 'generate_topics'">📝</span>
+                                <span x-show="task.type === 'generate_script'">📜</span>
+                                <span x-show="task.type === 'compose_video'">🎥</span>
+                                <span x-show="task.type === 'generate_tts'">🔊</span>
+                                <span x-show="task.type === 'generate_subtitles'">📝</span>
+                            </div>
+
+                            <!-- 任务消息 -->
+                            <h3 class="text-lg font-semibold text-gray-800" x-text="task.message"></h3>
+                        </div>
+
+                        <!-- 详情 -->
+                        <div class="ml-11 space-y-2 text-sm text-gray-600">
+                            <!-- 时间 -->
+                            <div class="flex items-center gap-2">
+                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                                </svg>
+                                <span>创建时间: <span x-text="formatTime(task.created_at)"></span></span>
+                            </div>
+
+                            <!-- 进度 -->
+                            <div x-show="task.status === 'running'" class="flex items-center gap-2">
+                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"></path>
+                                </svg>
+                                <span>进度: <span x-text="task.progress"></span>%</span>
+                                <div class="flex-1 max-w-xs">
+                                    <div class="bg-gray-200 rounded-full h-2">
+                                        <div class="bg-blue-600 h-2 rounded-full transition-all" :style="`width: ${task.progress}%`"></div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- 错误信息 -->
+                            <div x-show="task.status === 'failed'" class="flex items-center gap-2 text-red-600">
+                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                                </svg>
+                                <span x-text="task.error || '任务失败'"></span>
+                            </div>
+
+                            <!-- 结果摘要 -->
+                            <div x-show="task.status === 'completed' && task.result" class="flex items-center gap-2 text-green-600">
+                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                                </svg>
+                                <span x-text="getResultSummary(task)"></span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- 右侧：状态和操作 -->
+                    <div class="flex flex-col items-end gap-3">
+                        <!-- 状态标签 -->
+                        <span class="px-3 py-1 rounded-full text-sm font-semibold"
+                              :class="{
+                                  'bg-green-100 text-green-800': task.status === 'completed',
+                                  'bg-yellow-100 text-yellow-800': task.status === 'running',
+                                  'bg-red-100 text-red-800': task.status === 'failed',
+                                  'bg-gray-100 text-gray-800': task.status === 'pending'
+                              }" x-text="statusText(task.status)"></span>
+
+                        <!-- 操作按钮 -->
+                        <div class="flex gap-2">
+                            <button
+                                x-show="task.status === 'completed'"
+                                @click="viewResult(task)"
+                                class="btn btn-secondary text-sm"
+                            >
+                                查看结果
+                            </button>
+                            <button
+                                x-show="task.status === 'failed'"
+                                @click="retryTask(task)"
+                                class="btn btn-primary text-sm"
+                            >
+                                重试
+                            </button>
+                            <button
+                                @click="deleteTask(task.id)"
+                                class="btn btn-danger text-sm"
+                            >
+                                删除
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </template>
+    </div>
+
+    <!-- 分页 -->
+    <div x-show="!loading && tasks.length > 0" class="mt-8 flex justify-center gap-2">
+        <button
+            @click="prevPage"
+            :disabled="currentPage === 1"
+            class="btn btn-secondary"
+            :class="{'opacity-50': currentPage === 1}"
+        >
+            上一页
+        </button>
+        <span class="px-4 py-2 bg-white rounded" x-text="`${currentPage} / ${totalPages}`"></span>
+        <button
+            @click="nextPage"
+            :disabled="currentPage >= totalPages"
+            class="btn btn-secondary"
+            :class="{'opacity-50': currentPage >= totalPages}"
+        >
+            下一页
+        </button>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+function historyManager() {
+    return {
+        tasks: [],
+        loading: false,
+        filterStatus: '',
+        filterType: '',
+        currentPage: 1,
+        pageSize: 20,
+        total: 0,
+        stats: {
+            total: 0,
+            completed: 0,
+            failed: 0,
+            running: 0
+        },
+
+        get totalPages() {
+            return Math.ceil(this.total / this.pageSize);
+        },
+
+        async init() {
+            await this.loadHistory();
+            await this.loadStats();
+        },
+
+        async loadHistory() {
+            this.loading = true;
+
+            try {
+                const params = new URLSearchParams({
+                    limit: this.pageSize,
+                    offset: (this.currentPage - 1) * this.pageSize
+                });
+
+                if (this.filterStatus) params.append('status', this.filterStatus);
+                if (this.filterType) params.append('type', this.filterType);
+
+                const response = await fetch(`/api/history?${params}`);
+                const data = await response.json();
+
+                if (data.success) {
+                    this.tasks = data.tasks || [];
+                    this.total = data.total || this.tasks.length;
+                }
+            } catch (error) {
+                console.error('加载历史失败:', error);
+                window.appUtils?.showToast('加载历史失败', 'error');
+            } finally {
+                this.loading = false;
+            }
+        },
+
+        async loadStats() {
+            try {
+                const response = await fetch('/api/history/stats/summary');
+                const data = await response.json();
+
+                if (data.success) {
+                    this.stats = data.stats || this.stats;
+                }
+            } catch (error) {
+                console.error('加载统计失败:', error);
+            }
+        },
+
+        async viewResult(task) {
+            // 根据任务类型跳转到相应页面
+            const typeRoutes = {
+                'generate_topics': '/topics',
+                'generate_script': '/scripts',
+                'compose_video': '/videos',
+                'generate_tts': '/videos'
+            };
+
+            const route = typeRoutes[task.type];
+            if (route) {
+                window.appUtils?.showToast(`正在跳转到${this.getTypeText(task.type)}页面...`, 'info');
+                setTimeout(() => {
+                    window.location.href = route;
+                }, 1000);
+            } else {
+                window.appUtils?.showToast('无法查看此任务结果', 'error');
+            }
+        },
+
+        async retryTask(task) {
+            if (!confirm('确定要重试此任务吗？')) return;
+
+            // TODO: 实现任务重试逻辑
+            window.appUtils?.showToast('重试功能开发中', 'info');
+        },
+
+        async deleteTask(taskId) {
+            if (!confirm('确定要删除此历史记录吗？')) return;
+
+            try {
+                const response = await fetch(`/api/history/${taskId}`, {
+                    method: 'DELETE'
+                });
+
+                const data = await response.json();
+
+                if (data.success) {
+                    window.appUtils?.showToast('删除成功', 'success');
+                    await this.loadHistory();
+                    await this.loadStats();
+                } else {
+                    throw new Error(data.error || '删除失败');
+                }
+            } catch (error) {
+                console.error('删除失败:', error);
+                window.appUtils?.showToast(error.message, 'error');
+            }
+        },
+
+        async clearHistory() {
+            if (!confirm('确定要清空所有历史记录吗？此操作不可恢复！')) return;
+
+            try {
+                const response = await fetch('/api/history/clear', {
+                    method: 'DELETE'
+                });
+
+                const data = await response.json();
+
+                if (data.success) {
+                    window.appUtils?.showToast('历史记录已清空', 'success');
+                    await this.loadHistory();
+                    await this.loadStats();
+                } else {
+                    throw new Error(data.error || '清空失败');
+                }
+            } catch (error) {
+                console.error('清空失败:', error);
+                window.appUtils?.showToast(error.message, 'error');
+            }
+        },
+
+        prevPage() {
+            if (this.currentPage > 1) {
+                this.currentPage--;
+                this.loadHistory();
+            }
+        },
+
+        nextPage() {
+            if (this.currentPage < this.totalPages) {
+                this.currentPage++;
+                this.loadHistory();
+            }
+        },
+
+        formatTime(isoString) {
+            if (!isoString) return '';
+            const date = new Date(isoString);
+            return date.toLocaleString('zh-CN');
+        },
+
+        statusText(status) {
+            const statusMap = {
+                'completed': '已完成',
+                'running': '进行中',
+                'failed': '失败',
+                'pending': '等待中'
+            };
+            return statusMap[status] || status;
+        },
+
+        getTypeText(type) {
+            const typeMap = {
+                'generate_topics': '主题生成',
+                'generate_script': '脚本生成',
+                'compose_video': '视频合成',
+                'generate_tts': '语音合成',
+                'generate_subtitles': '字幕生成'
+            };
+            return typeMap[type] || type;
+        },
+
+        getResultSummary(task) {
+            if (!task.result) return '';
+
+            switch (task.type) {
+                case 'generate_topics':
+                    return `生成了 ${task.result.total || 0} 个主题`;
+                case 'generate_script':
+                    return '脚本生成成功';
+                case 'compose_video':
+                    return '视频合成成功';
+                case 'generate_tts':
+                    return '语音生成成功';
+                default:
+                    return '任务完成';
+            }
+        }
+    };
+}
+</script>
+{% endblock %}

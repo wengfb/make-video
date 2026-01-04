@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>样式测试</title>
+
+    <!-- Tailwind CSS (CDN) -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {}
+            }
+        }
+    </script>
+
+    <!-- 自定义样式 -->
+    <link rel="stylesheet" href="/static/css/styles.css">
+</head>
+<body class="bg-gray-50 p-8">
+    <div class="max-w-2xl mx-auto">
+        <h1 class="text-2xl font-bold mb-6">样式测试页面</h1>
+
+        <!-- 按钮测试 -->
+        <div class="card mb-6">
+            <h2 class="text-lg font-semibold mb-4">按钮测试</h2>
+            <div class="flex gap-4">
+                <button class="btn btn-primary">主要按钮</button>
+                <button class="btn btn-secondary">次要按钮</button>
+                <button class="btn btn-success">成功按钮</button>
+                <button class="btn btn-danger">危险按钮</button>
+            </div>
+        </div>
+
+        <!-- 表单测试 -->
+        <div class="card mb-6">
+            <h2 class="text-lg font-semibold mb-4">表单测试</h2>
+
+            <div class="form-group">
+                <label class="form-label">输入框测试</label>
+                <input type="text" class="form-input" placeholder="测试输入框">
+            </div>
+
+            <div class="form-group">
+                <label class="form-label">下拉框测试</label>
+                <select class="form-select">
+                    <option>选项1</option>
+                    <option>选项2</option>
+                    <option>选项3</option>
+                </select>
+            </div>
+
+            <div class="form-group">
+                <label class="form-label">文本域测试</label>
+                <textarea class="form-textarea" placeholder="测试文本域"></textarea>
+            </div>
+        </div>
+
+        <!-- 标签测试 -->
+        <div class="card mb-6">
+            <h2 class="text-lg font-semibold mb-4">标签测试</h2>
+            <div class="flex gap-2">
+                <span class="tag tag-purple">紫色标签</span>
+                <span class="tag tag-blue">蓝色标签</span>
+                <span class="tag tag-green">绿色标签</span>
+                <span class="tag tag-gray">灰色标签</span>
+            </div>
+        </div>
+
+        <!-- 提示框测试 -->
+        <div class="mb-6">
+            <h2 class="text-lg font-semibold mb-4">提示框测试</h2>
+            <div class="alert alert-success">成功提示</div>
+            <div class="alert alert-error">错误提示</div>
+            <div class="alert alert-warning">警告提示</div>
+            <div class="alert alert-info">信息提示</div>
+        </div>
+
+        <!-- 调试信息 -->
+        <div class="card bg-gray-100">
+            <h2 class="text-lg font-semibold mb-4">调试信息</h2>
+            <p class="text-sm">如果上面的样式都显示正常，说明CSS已成功加载。</p>
+            <p class="text-sm mt-2">如果样式没有生效，请尝试：</p>
+            <ol class="list-decimal list-inside text-sm mt-2">
+                <li>按 Ctrl+Shift+R (Windows/Linux) 或 Cmd+Shift+R (Mac) 强制刷新</li>
+                <li>清除浏览器缓存</li>
+                <li>打开开发者工具 (F12)，检查 Network 标签，查看 styles.css 是否加载成功</li>
+                <li>在开发者工具的 Console 中执行: getComputedStyle(document.querySelector('.form-input')).cssText</li>
+            </ol>
+        </div>
+    </div>
+</body>
+</html>

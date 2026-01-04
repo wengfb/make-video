@@ -844,7 +844,8 @@ class MaterialRecommender:
             matched_keywords.sort(key=lambda x: x['len'], reverse=True)
 
             # 日志显示所有匹配
-            print(f"      匹配词: {', '.join([f'{m['cn']}→{m['en']}' for m in matched_keywords[:5]])}")
+            matches_str = ', '.join([f"{m['cn']}→{m['en']}" for m in matched_keywords[:5]])
+            print(f"      匹配词: {matches_str}")
 
             # 组合前2个最相关的关键词
             top_matches = matched_keywords[:2]

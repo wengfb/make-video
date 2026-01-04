@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}科普视频自动化制作系统{% endblock %}</title>
+
+    <!-- Tailwind CSS (CDN) -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {}
+            }
+        }
+    </script>
+
+    <!-- 自定义样式 - 在Tailwind之后加载以确保覆盖 -->
+    <link rel="stylesheet" href="/static/css/styles.css">
+
+    <!-- Alpine.js (CDN) -->
+    <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+
+    {% block head %}
+    {% endblock %}
+</head>
+<body class="bg-gray-50 text-gray-800"
+      x-data="{ mobileMenuOpen: false }">
+
+    <!-- 顶部导航栏 -->
+    <nav class="bg-gradient-to-r from-purple-600 to-indigo-600 text-white shadow-lg">
+        <div class="container mx-auto px-4">
+            <div class="flex justify-between items-center h-16">
+                <!-- Logo和标题 -->
+                <div class="flex items-center space-x-3">
+                    <div class="text-2xl">🎬</div>
+                    <a href="/" class="text-xl font-bold hover:text-purple-200 transition">
+                        科普视频制作系统
+                    </a>
+                    <span class="text-sm bg-white/20 px-2 py-1 rounded">V5.0</span>
+                </div>
+
+                <!-- 桌面导航菜单 -->
+                <div class="hidden md:flex items-center space-x-6">
+                    <a href="/"
+                       class="hover:text-purple-200 transition {% if request.url.path == '/' %}font-bold border-b-2 border-white{% endif %}">
+                        🏠 首页
+                    </a>
+                    <a href="/topics"
+                       class="hover:text-purple-200 transition {% if '/topics' in request.url.path %}font-bold border-b-2 border-white{% endif %}">
+                        📝 主题
+                    </a>
+                    <a href="/scripts"
+                       class="hover:text-purple-200 transition {% if '/scripts' in request.url.path %}font-bold border-b-2 border-white{% endif %}">
+                        📜 脚本
+                    </a>
+                    <a href="/materials"
+                       class="hover:text-purple-200 transition {% if '/materials' in request.url.path %}font-bold border-b-2 border-white{% endif %}">
+                        🎨 素材
+                    </a>
+                    <a href="/videos"
+                       class="hover:text-purple-200 transition {% if '/videos' in request.url.path %}font-bold border-b-2 border-white{% endif %}">
+                        🎥 视频
+                    </a>
+                    <a href="/history"
+                       class="hover:text-purple-200 transition {% if '/history' in request.url.path %}font-bold border-b-2 border-white{% endif %}">
+                        📊 历史
+                    </a>
+                </div>
+
+                <!-- 移动端菜单按钮 -->
+                <button @click="mobileMenuOpen = !mobileMenuOpen"
+                        class="md:hidden p-2 rounded hover:bg-white/20 transition">
+                    <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path x-show="!mobileMenuOpen" stroke-linecap="round" stroke-linejoin="round"
+                              stroke-width="2" d="M4 6h16M4 12h16M4 18h16"/>
+                        <path x-show="mobileMenuOpen" stroke-linecap="round" stroke-linejoin="round"
+                              stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+                    </svg>
+                </button>
+            </div>
+
+            <!-- 移动端导航菜单 -->
+            <div x-show="mobileMenuOpen" x-transition
+                 class="md:hidden py-4 space-y-2 border-t border-white/20">
+                <a href="/" class="block py-2 px-4 hover:bg-white/20 rounded">🏠 首页</a>
+                <a href="/topics" class="block py-2 px-4 hover:bg-white/20 rounded">📝 主题</a>
+                <a href="/scripts" class="block py-2 px-4 hover:bg-white/20 rounded">📜 脚本</a>
+                <a href="/materials" class="block py-2 px-4 hover:bg-white/20 rounded">🎨 素材</a>
+                <a href="/videos" class="block py-2 px-4 hover:bg-white/20 rounded">🎥 视频</a>
+                <a href="/history" class="block py-2 px-4 hover:bg-white/20 rounded">📊 历史</a>
+            </div>
+        </div>
+    </nav>
+
+    <!-- 主内容区域 -->
+    <main class="container mx-auto px-4 py-8">
+        {% block content %}{% endblock %}
+    </main>
+
+    <!-- 底部状态栏 -->
+    <footer class="bg-gray-800 text-white py-6 mt-auto">
+        <div class="container mx-auto px-4 text-center">
+            <p class="text-gray-400 text-sm">
+                © 2024 科普视频自动化制作系统 | AI驱动的端到端视频生产平台
+            </p>
+            <p class="text-gray-500 text-xs mt-2">
+                Powered by FastAPI + Alpine.js + Tailwind CSS
+            </p>
+        </div>
+    </footer>
+
+    <!-- 全局JavaScript -->
+    <script src="/static/js/app.js"></script>
+
+    {% block scripts %}{% endblock %}
+</body>
+</html>

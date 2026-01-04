@@ -1,0 +1,408 @@
+{% extends "base.html" %}
+
+{% block title %}主题生成 - 科普视频自动化制作系统{% endblock %}
+
+{% block content %}
+<div x-data="topicGenerator()" x-init="init()">
+    <!-- 页面标题 -->
+    <div class="mb-8">
+        <h1 class="text-3xl font-bold text-gray-800 mb-2">📝 生成视频主题</h1>
+        <p class="text-gray-600">使用AI生成科普视频主题建议</p>
+    </div>
+
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
+        <!-- 左侧：生成表单 -->
+        <div class="lg:col-span-1">
+            <div class="card">
+                <h2 class="text-xl font-bold mb-6">生成参数</h2>
+
+                <form @submit.prevent="generateTopics">
+                    <!-- 科学领域 -->
+                    <div class="form-group">
+                        <label class="form-label">科学领域</label>
+                        <select x-model="form.field" class="form-select">
+                            <option value="">不限领域</option>
+                            <option value="physics">物理学</option>
+                            <option value="chemistry">化学</option>
+                            <option value="biology">生物学</option>
+                            <option value="astronomy">天文学</option>
+                            <option value="geology">地质学</option>
+                            <option value="ecology">生态学</option>
+                            <option value="technology">科技</option>
+                        </select>
+                        <p class="text-xs text-gray-500 mt-1">留空则随机选择领域</p>
+                    </div>
+
+                    <!-- 目标受众 -->
+                    <div class="form-group">
+                        <label class="form-label">目标受众</label>
+                        <select x-model="form.audience" class="form-select">
+                            <option value="general_public">大众</option>
+                            <option value="students">学生</option>
+                            <option value="children">儿童</option>
+                            <option value="experts">专家</option>
+                        </select>
+                    </div>
+
+                    <!-- 生成数量 -->
+                    <div class="form-group">
+                        <label class="form-label">
+                            生成数量: <span x-text="form.count"></span>
+                        </label>
+                        <input
+                            type="range"
+                            x-model="form.count"
+                            min="1"
+                            max="20"
+                            class="w-full"
+                        >
+                        <div class="flex justify-between text-xs text-gray-500">
+                            <span>1</span>
+                            <span>20</span>
+                        </div>
+                    </div>
+
+                    <!-- 风格 -->
+                    <div class="form-group">
+                        <label class="form-label">风格</label>
+                        <select x-model="form.style" class="form-select">
+                            <option value="educational">教育性</option>
+                            <option value="entertaining">娱乐性</option>
+                            <option value="inspiring">启发性</option>
+                            <option value="practical">实用性</option>
+                        </select>
+                    </div>
+
+                    <!-- 自定义要求 -->
+                    <div class="form-group">
+                        <label class="form-label">自定义要求（可选）</label>
+                        <textarea
+                            x-model="form.custom_requirements"
+                            class="form-input"
+                            rows="3"
+                            placeholder="例如：关注环保主题，面向青少年..."
+                        ></textarea>
+                    </div>
+
+                    <!-- 成本预估 -->
+                    <div class="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-6">
+                        <div class="flex justify-between items-center">
+                            <span class="text-sm text-blue-800">预估API成本:</span>
+                            <span class="text-lg font-bold text-blue-900" x-text="estimatedCost"></span>
+                        </div>
+                    </div>
+
+                    <!-- 生成按钮 -->
+                    <button
+                        type="submit"
+                        :disabled="loading"
+                        class="btn btn-primary w-full"
+                    >
+                        <template x-if="!loading">
+                            <span>🚀 生成主题</span>
+                        </template>
+                        <template x-if="loading">
+                            <span class="flex items-center justify-center">
+                                <svg class="animate-spin -ml-1 mr-3 h-5 w-5 text-white" fill="none" viewBox="0 0 24 24">
+                                    <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                                    <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                                </svg>
+                                生成中...
+                            </span>
+                        </template>
+                    </button>
+                </form>
+            </div>
+        </div>
+
+        <!-- 右侧：进度和结果 -->
+        <div class="lg:col-span-2">
+            <!-- 进度显示 -->
+            <div x-show="loading" class="card mb-6">
+                <h3 class="text-lg font-bold mb-4">生成进度</h3>
+
+                <!-- 进度条 -->
+                <div class="progress-bar-container mb-4">
+                    <div
+                        class="progress-bar progress-bar-animated"
+                        :style="`width: ${progress}%`"
+                    ></div>
+                </div>
+
+                <!-- 进度信息 -->
+                <div class="flex justify-between text-sm">
+                    <span x-text="progressMessage"></span>
+                    <span class="font-semibold" x-text="`${progress}%`"></span>
+                </div>
+
+                <!-- 预计时间 -->
+                <div x-show="progress > 0 && progress < 100" class="mt-4 text-sm text-gray-600">
+                    <p>⏱️ 预计剩余时间: <span x-text="estimatedTime"></span></p>
+                </div>
+            </div>
+
+            <!-- 错误提示 -->
+            <div x-show="error" class="alert alert-error mb-6">
+                <div class="flex items-center">
+                    <span class="text-2xl mr-3">❌</span>
+                    <div>
+                        <p class="font-bold">生成失败</p>
+                        <p class="text-sm" x-text="error"></p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 生成结果 -->
+            <div x-show="topics.length > 0">
+                <!-- 结果统计 -->
+                <div class="card mb-6">
+                    <div class="flex items-center justify-between">
+                        <div>
+                            <h3 class="text-lg font-bold">生成结果</h3>
+                            <p class="text-sm text-gray-600">
+                                共生成 <span class="font-semibold text-purple-600" x-text="topics.length"></span> 个主题
+                            </p>
+                        </div>
+                        <button
+                            @click="regenerateAll"
+                            class="btn btn-secondary text-sm"
+                        >
+                            🔄 重新生成
+                        </button>
+                    </div>
+                </div>
+
+                <!-- 主题卡片列表 -->
+                <div class="topics-grid">
+                    <template x-for="(topic, index) in topics" :key="topic.id">
+                        <div class="topic-card">
+                            <!-- 序号 -->
+                            <div class="flex items-center justify-between mb-3">
+                                <span class="bg-purple-100 text-purple-800 px-2 py-1 rounded text-sm font-semibold">
+                                    #<span x-text="index + 1"></span>
+                                </span>
+                                <span class="text-xs text-gray-500" x-text="topic?.difficulty || '未知'"></span>
+                            </div>
+
+                            <!-- 标题 -->
+                            <h4 class="text-lg font-bold mb-2" x-text="topic?.title || '未命名主题'"></h4>
+
+                            <!-- 描述 -->
+                            <p class="text-gray-600 text-sm mb-4 line-clamp-3" x-text="topic?.description || '暂无描述'"></p>
+
+                            <!-- 标签 -->
+                            <div class="flex flex-wrap gap-2 mb-4">
+                                <span class="tag tag-blue text-xs" x-text="topic?.field || '未知'"></span>
+                                <span class="tag tag-green text-xs" x-text="topic?.target_audience || '未知'"></span>
+                            </div>
+
+                            <!-- 操作按钮 -->
+                            <div class="flex gap-2">
+                                <button
+                                    @click="useTopic(topic)"
+                                    class="btn btn-primary flex-1 text-sm"
+                                >
+                                    使用此主题
+                                </button>
+                                <button
+                                    @click="copyTopic(topic)"
+                                    class="btn btn-secondary text-sm"
+                                    title="复制"
+                                >
+                                    📋
+                                </button>
+                                <button
+                                    @click="saveTopic(topic)"
+                                    class="btn btn-success text-sm"
+                                    :class="{'opacity-50': topic.saved}"
+                                    :disabled="topic.saved"
+                                    title="保存"
+                                >
+                                    <span x-show="!topic.saved">⭐</span>
+                                    <span x-show="topic.saved">✅</span>
+                                </button>
+                            </div>
+                        </div>
+                    </template>
+                </div>
+            </div>
+
+            <!-- 空状态 -->
+            <div x-show="!loading && !error && topics.length === 0" class="text-center py-16">
+                <div class="text-6xl mb-4">📝</div>
+                <h3 class="text-xl font-bold text-gray-800 mb-2">准备生成主题</h3>
+                <p class="text-gray-600">选择左侧参数，点击"生成主题"开始</p>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+function topicGenerator() {
+    return {
+        form: {
+            field: '',
+            audience: 'general_public',
+            difficulty: 'medium',
+            count: 10,
+            style: 'educational',
+            custom_requirements: ''
+        },
+        loading: false,
+        progress: 0,
+        progressMessage: '',
+        startTime: null,
+        topics: [],
+        error: '',
+
+        get estimatedCost() {
+            // 假设每个主题成本 $0.002
+            return `$${(this.form.count * 0.002).toFixed(4)}`;
+        },
+
+        get estimatedTime() {
+            if (!this.startTime || this.progress === 0) return '计算中...';
+
+            const elapsed = Date.now() - this.startTime;
+            const remaining = (elapsed / this.progress) * (100 - this.progress);
+
+            const seconds = Math.floor(remaining / 1000);
+            if (seconds < 60) return `${seconds}秒`;
+
+            const minutes = Math.floor(seconds / 60);
+            return `${minutes}分${seconds % 60}秒`;
+        },
+
+        async init() {
+            console.log('主题生成页面已加载');
+        },
+
+        async generateTopics() {
+            this.loading = true;
+            this.progress = 0;
+            this.progressMessage = '创建生成任务...';
+            this.topics = [];
+            this.error = '';
+            this.startTime = Date.now();
+
+            try {
+                // 创建生成任务
+                const response = await fetch('/api/topics/generate', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify(this.form)
+                });
+
+                const data = await response.json();
+
+                if (!data.success) {
+                    throw new Error(data.message);
+                }
+
+                const taskId = data.task_id;
+
+                // 连接WebSocket监听进度
+                await this.watchProgress(taskId);
+
+            } catch (error) {
+                console.error('生成主题失败:', error);
+                this.error = error.message;
+                this.loading = false;
+            }
+        },
+
+        async watchProgress(taskId) {
+            return new Promise((resolve, reject) => {
+                const ws = new WebSocket(`ws://${window.location.host}/ws/progress/${taskId}`);
+
+                ws.onmessage = (event) => {
+                    const data = JSON.parse(event.data);
+
+                    // 更新进度
+                    this.progress = data.progress || 0;
+                    this.progressMessage = data.message || '';
+
+                    // 检查任务状态
+                    if (data.status === 'completed') {
+                        this.topics = data.result.topics || [];
+                        this.loading = false;
+                        ws.close();
+                        resolve();
+
+                        // 显示成功提示
+                        window.appUtils?.showToast(
+                            `成功生成 ${this.topics.length} 个主题`,
+                            'success'
+                        );
+
+                    } else if (data.status === 'failed') {
+                        this.error = data.error || '生成失败';
+                        this.loading = false;
+                        ws.close();
+                        reject(new Error(data.error));
+
+                        window.appUtils?.showToast(this.error, 'error');
+                    }
+                };
+
+                ws.onerror = (error) => {
+                    console.error('WebSocket错误:', error);
+                    this.error = 'WebSocket连接失败';
+                    this.loading = false;
+                    ws.close();
+                    reject(error);
+                };
+            });
+        },
+
+        regenerateAll() {
+            this.generateTopics();
+        },
+
+        useTopic(topic) {
+            // 跳转到脚本生成页面，并传递主题
+            // TODO: 实现跨页面数据传递
+            window.appUtils?.showToast('即将跳转到脚本生成页面...', 'info');
+            setTimeout(() => {
+                window.location.href = `/scripts?topic_id=${topic.id}`;
+            }, 1000);
+        },
+
+        copyTopic(topic) {
+            const text = `${topic.title}\n\n${topic.description}\n\n领域: ${topic.field}\n难度: ${topic.difficulty}`;
+
+            navigator.clipboard.writeText(text).then(() => {
+                window.appUtils?.showToast('主题已复制到剪贴板', 'success');
+            }).catch(() => {
+                window.appUtils?.showToast('复制失败', 'error');
+            });
+        },
+
+        async saveTopic(topic) {
+            try {
+                const response = await fetch('/api/topics/save', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify(topic)
+                });
+
+                const data = await response.json();
+
+                if (data.success) {
+                    topic.saved = true;
+                    topic.saved_id = data.topic_id;
+                    window.appUtils?.showToast('主题已保存', 'success');
+                } else {
+                    throw new Error(data.error);
+                }
+            } catch (error) {
+                console.error('保存主题失败:', error);
+                window.appUtils?.showToast(error.message, 'error');
+            }
+        }
+    };
+}
+</script>
+{% endblock %}
