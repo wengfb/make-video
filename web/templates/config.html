@@ -1,0 +1,995 @@
+{% extends "base.html" %}
+
+{% block title %}系统配置 - 科普视频自动化制作系统{% endblock %}
+
+{% block head %}
+<style>
+[x-cloak] { display: none !important; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div x-data="configManager()" x-init="init()" class="max-w-7xl mx-auto">
+    <!-- 页面标题 -->
+    <div class="mb-8">
+        <h1 class="text-3xl font-bold text-gray-800">⚙️ 系统配置</h1>
+        <p class="text-gray-600 mt-2">管理系统各项配置参数，包括AI服务、TTS语音、视频输出等设置</p>
+    </div>
+
+    <!-- 错误提示 -->
+    <div x-show="error" class="mb-6 p-4 bg-red-100 border border-red-400 text-red-700 rounded-lg" x-transition>
+        <strong>错误：</strong> <span x-text="error"></span>
+    </div>
+
+    <!-- 成功提示 -->
+    <div x-show="success" class="mb-6 p-4 bg-green-100 border border-green-400 text-green-700 rounded-lg" x-transition>
+        <span x-text="success"></span>
+    </div>
+
+    <!-- 主布局：侧边栏 + 内容区 -->
+    <div class="flex flex-col lg:flex-row gap-6">
+
+        <!-- 左侧：配置分类导航 -->
+        <div class="lg:w-1/4">
+            <div class="bg-white rounded-lg shadow-md p-4 sticky top-4">
+                <h2 class="text-lg font-semibold mb-4 text-gray-700">📋 配置分类</h2>
+
+                <!-- Settings配置 -->
+                <div class="mb-4">
+                    <div class="text-sm font-medium text-gray-500 mb-2 uppercase tracking-wide">Settings</div>
+                    <nav class="space-y-1">
+                        <button @click="switchSection('settings.ai')"
+                                :class="activeSection === 'settings.ai' ? 'bg-purple-100 text-purple-700 border-l-4 border-purple-600' : 'text-gray-700 hover:bg-gray-100'"
+                                class="w-full text-left px-3 py-2 rounded-md transition flex items-center">
+                            <span class="mr-2">🤖</span> AI配置
+                        </button>
+                        <button @click="switchSection('settings.tts')"
+                                :class="activeSection === 'settings.tts' ? 'bg-purple-100 text-purple-700 border-l-4 border-purple-600' : 'text-gray-700 hover:bg-gray-100'"
+                                class="w-full text-left px-3 py-2 rounded-md transition flex items-center">
+                            <span class="mr-2">🎙️</span> TTS配置
+                        </button>
+                        <button @click="switchSection('settings.ai_image')"
+                                :class="activeSection === 'settings.ai_image' ? 'bg-purple-100 text-purple-700 border-l-4 border-purple-600' : 'text-gray-700 hover:bg-gray-100'"
+                                class="w-full text-left px-3 py-2 rounded-md transition flex items-center">
+                            <span class="mr-2">🎨</span> 图片生成
+                        </button>
+                        <button @click="switchSection('settings.video')"
+                                :class="activeSection === 'settings.video' ? 'bg-purple-100 text-purple-700 border-l-4 border-purple-600' : 'text-gray-700 hover:bg-gray-100'"
+                                class="w-full text-left px-3 py-2 rounded-md transition flex items-center">
+                            <span class="mr-2">🎬</span> 视频配置
+                        </button>
+                        <button @click="switchSection('settings.subtitle')"
+                                :class="activeSection === 'settings.subtitle' ? 'bg-purple-100 text-purple-700 border-l-4 border-purple-600' : 'text-gray-700 hover:bg-gray-100'"
+                                class="w-full text-left px-3 py-2 rounded-md transition flex items-center">
+                            <span class="mr-2">📝</span> 字幕配置
+                        </button>
+                        <button @click="switchSection('settings.paths')"
+                                :class="activeSection === 'settings.paths' ? 'bg-purple-100 text-purple-700 border-l-4 border-purple-600' : 'text-gray-700 hover:bg-gray-100'"
+                                class="w-full text-left px-3 py-2 rounded-md transition flex items-center">
+                            <span class="mr-2">📁</span> 路径配置
+                        </button>
+                        <button @click="switchSection('settings.materials')"
+                                :class="activeSection === 'settings.materials' ? 'bg-purple-100 text-purple-700 border-l-4 border-purple-600' : 'text-gray-700 hover:bg-gray-100'"
+                                class="w-full text-left px-3 py-2 rounded-md transition flex items-center">
+                            <span class="mr-2">🔌</span> 素材源
+                        </button>
+                    </nav>
+                </div>
+
+                <!-- Templates配置 -->
+                <div class="mb-4">
+                    <div class="text-sm font-medium text-gray-500 mb-2 uppercase tracking-wide">Templates</div>
+                    <nav class="space-y-1">
+                        <button @click="switchSection('templates.script_templates')"
+                                :class="activeSection === 'templates.script_templates' ? 'bg-purple-100 text-purple-700 border-l-4 border-purple-600' : 'text-gray-700 hover:bg-gray-100'"
+                                class="w-full text-left px-3 py-2 rounded-md transition flex items-center">
+                            <span class="mr-2">📜</span> 脚本模板
+                        </button>
+                        <button @click="switchSection('templates.prompt_templates')"
+                                :class="activeSection === 'templates.prompt_templates' ? 'bg-purple-100 text-purple-700 border-l-4 border-purple-600' : 'text-gray-700 hover:bg-gray-100'"
+                                class="w-full text-left px-3 py-2 rounded-md transition flex items-center">
+                            <span class="mr-2">💬</span> 提示词
+                        </button>
+                        <button @click="switchSection('templates.visual_templates')"
+                                :class="activeSection === 'templates.visual_templates' ? 'bg-purple-100 text-purple-700 border-l-4 border-purple-600' : 'text-gray-700 hover:bg-gray-100'"
+                                class="w-full text-left px-3 py-2 rounded-md transition flex items-center">
+                            <span class="mr-2">🎭</span> 视觉模板
+                        </button>
+                    </nav>
+                </div>
+            </div>
+        </div>
+
+        <!-- 右侧：配置编辑区 -->
+        <div class="lg:w-3/4">
+            <!-- 加载状态 -->
+            <div x-show="loading" class="bg-white rounded-lg shadow-md p-8 text-center">
+                <div class="animate-spin rounded-full h-12 w-12 border-b-2 border-purple-600 mx-auto"></div>
+                <p class="mt-4 text-gray-600">加载配置中...</p>
+            </div>
+
+            <!-- 配置编辑表单 -->
+            <template x-if="!loading && config.settings && config.templates">
+                <div class="bg-white rounded-lg shadow-md p-6">
+                <!-- AI配置 -->
+                <div x-show="activeSection === 'settings.ai'">
+                    <h2 class="text-2xl font-bold mb-6 text-gray-800">🤖 AI服务配置</h2>
+                    <div class="space-y-4">
+                        <!-- Provider -->
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-1">AI提供商</label>
+                            <select x-model="config.settings.ai.provider" class="w-full border border-gray-300 rounded-md px-3 py-2 focus:ring-2 focus:ring-purple-500 focus:border-transparent">
+                                <option value="openai">OpenAI (GPT-4)</option>
+                                <option value="glm">智谱AI (GLM)</option>
+                                <option value="anthropic">Anthropic (Claude)</option>
+                            </select>
+                            <p class="text-xs text-gray-500 mt-1">选择AI服务提供商</p>
+                        </div>
+
+                        <!-- Model -->
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-1">模型名称</label>
+                            <input type="text" x-model="config.settings.ai.model" class="w-full border border-gray-300 rounded-md px-3 py-2 focus:ring-2 focus:ring-purple-500 focus:border-transparent" placeholder="gpt-4">
+                            <p class="text-xs text-gray-500 mt-1">指定使用的AI模型</p>
+                        </div>
+
+                        <!-- API Key -->
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-1">API密钥</label>
+                            <div class="flex gap-2">
+                                <input type="password" x-model="config.settings.ai.api_key" class="flex-1 border border-gray-300 rounded-md px-3 py-2 focus:ring-2 focus:ring-purple-500 focus:border-transparent" placeholder="sk-...">
+                                <button @click="testApi('ai')" :disabled="testingApi" class="px-4 py-2 bg-blue-500 text-white rounded-md hover:bg-blue-600 disabled:opacity-50 whitespace-nowrap">
+                                    <span x-show="!testingApi">🧪 测试</span>
+                                    <span x-show="testingApi">测试中...</span>
+                                </button>
+                            </div>
+                            <p class="text-xs text-gray-500 mt-1">API访问密钥</p>
+                        </div>
+
+                        <!-- Base URL -->
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-1">API地址</label>
+                            <input type="text" x-model="config.settings.ai.base_url" class="w-full border border-gray-300 rounded-md px-3 py-2 focus:ring-2 focus:ring-purple-500 focus:border-transparent" placeholder="https://api.openai.com/v1">
+                            <p class="text-xs text-gray-500 mt-1">API服务地址（可选，用于自定义endpoint）</p>
+                        </div>
+
+                        <!-- Temperature -->
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-1">温度: <span x-text="config.settings.ai.temperature"></span></label>
+                            <input type="range" x-model="config.settings.ai.temperature" min="0" max="2" step="0.1" class="w-full">
+                            <p class="text-xs text-gray-500 mt-1">控制生成文本的随机性（0-2）</p>
+                        </div>
+
+                        <!-- Max Tokens -->
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-1">最大令牌数</label>
+                            <input type="number" x-model="config.settings.ai.max_tokens" class="w-full border border-gray-300 rounded-md px-3 py-2 focus:ring-2 focus:ring-purple-500 focus:border-transparent">
+                            <p class="text-xs text-gray-500 mt-1">单次请求最大token数量</p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- TTS配置 -->
+                <div x-show="activeSection === 'settings.tts'">
+                    <h2 class="text-2xl font-bold mb-6 text-gray-800">🎙️ TTS语音合成配置</h2>
+                    <div class="space-y-4">
+                        <!-- Provider -->
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-1">TTS提供商</label>
+                            <select x-model="config.settings.tts.provider" class="w-full border border-gray-300 rounded-md px-3 py-2 focus:ring-2 focus:ring-purple-500 focus:border-transparent">
+                                <option value="edge">Microsoft Edge TTS (免费)</option>
+                                <option value="openai">OpenAI TTS</option>
+                            </select>
+                        </div>
+
+                        <!-- Model -->
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-1">模型</label>
+                            <input type="text" x-model="config.settings.tts.model" class="w-full border border-gray-300 rounded-md px-3 py-2 focus:ring-2 focus:ring-purple-500 focus:border-transparent">
+                        </div>
+
+                        <!-- API Key -->
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-1">API密钥（OpenAI TTS需要）</label>
+                            <input type="password" x-model="config.settings.tts.api_key" class="w-full border border-gray-300 rounded-md px-3 py-2 focus:ring-2 focus:ring-purple-500 focus:border-transparent">
+                        </div>
+
+                        <!-- Voice -->
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-1">语音</label>
+                            <select x-model="config.settings.tts.voice" class="w-full border border-gray-300 rounded-md px-3 py-2 focus:ring-2 focus:ring-purple-500 focus:border-transparent">
+                                <option value="zh-CN-XiaoxiaoNeural">晓晓 (女声)</option>
+                                <option value="zh-CN-YunxiNeural">云希 (男声)</option>
+                                <option value="zh-CN-YunyangNeural">云扬 (男声)</option>
+                                <option value="zh-CN-XiaoyiNeural">晓伊 (女声)</option>
+                                <option value="zh-CN-YunjianNeural">云健 (男声)</option>
+                                <option value="zh-CN-XiaoxuanNeural">晓萱 (女声)</option>
+                                <option value="zh-CN-YunxiaNeural">云夏 (男声)</option>
+                            </select>
+                        </div>
+
+                        <!-- Speed -->
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-1">语速: <span x-text="config.settings.tts.speed"></span></label>
+                            <input type="range" x-model="config.settings.tts.speed" min="0.25" max="4" step="0.25" class="w-full">
+                        </div>
+
+                        <!-- BGM Mixing -->
+                        <div class="flex items-center">
+                            <input type="checkbox" x-model="config.settings.tts.enable_bgm_mixing" class="mr-2">
+                            <label class="text-sm font-medium text-gray-700">启用背景音乐混音</label>
+                        </div>
+
+                        <!-- BGM Volume -->
+                        <div x-show="config.settings.tts.enable_bgm_mixing">
+                            <label class="block text-sm font-medium text-gray-700 mb-1">背景音乐音量: <span x-text="config.settings.tts.bgm_volume"></span></label>
+                            <input type="range" x-model="config.settings.tts.bgm_volume" min="0" max="1" step="0.1" class="w-full">
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 图片生成配置 -->
+                <div x-show="activeSection === 'settings.ai_image'">
+                    <h2 class="text-2xl font-bold mb-6 text-gray-800">🎨 AI图片生成配置</h2>
+                    <div class="space-y-4">
+                        <!-- Provider -->
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-1">提供商</label>
+                            <select x-model="config.settings.ai_image.provider" class="w-full border border-gray-300 rounded-md px-3 py-2 focus:ring-2 focus:ring-purple-500 focus:border-transparent">
+                                <option value="dalle">DALL-E 3 (OpenAI)</option>
+                                <option value="cogview">CogView (智谱AI)</option>
+                                <option value="sd">Stable Diffusion</option>
+                            </select>
+                        </div>
+
+                        <!-- Model -->
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-1">模型</label>
+                            <input type="text" x-model="config.settings.ai_image.model" class="w-full border border-gray-300 rounded-md px-3 py-2 focus:ring-2 focus:ring-purple-500 focus:border-transparent">
+                        </div>
+
+                        <!-- API Key -->
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-1">API密钥</label>
+                            <input type="password" x-model="config.settings.ai_image.api_key" class="w-full border border-gray-300 rounded-md px-3 py-2 focus:ring-2 focus:ring-purple-500 focus:border-transparent">
+                        </div>
+
+                        <!-- Default Size -->
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-1">默认尺寸</label>
+                            <select x-model="config.settings.ai_image.default_size" class="w-full border border-gray-300 rounded-md px-3 py-2 focus:ring-2 focus:ring-purple-500 focus:border-transparent">
+                                <option value="1024x1024">1024x1024 (正方形)</option>
+                                <option value="1792x1024">1792x1024 (横向)</option>
+                                <option value="1024x1792">1024x1792 (纵向)</option>
+                            </select>
+                        </div>
+
+                        <!-- Default Quality -->
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-1">默认质量</label>
+                            <select x-model="config.settings.ai_image.default_quality" class="w-full border border-gray-300 rounded-md px-3 py-2 focus:ring-2 focus:ring-purple-500 focus:border-transparent">
+                                <option value="standard">标准</option>
+                                <option value="hd">高清</option>
+                            </select>
+                        </div>
+
+                        <!-- Default Style -->
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-1">默认风格</label>
+                            <textarea x-model="config.settings.ai_image.default_style" rows="3" class="w-full border border-gray-300 rounded-md px-3 py-2 focus:ring-2 focus:ring-purple-500 focus:border-transparent"></textarea>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 视频配置 -->
+                <div x-show="activeSection === 'settings.video'">
+                    <h2 class="text-2xl font-bold mb-6 text-gray-800">🎬 视频输出配置</h2>
+                    <div class="space-y-4">
+                        <!-- Resolution -->
+                        <div class="grid grid-cols-2 gap-4">
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-1">宽度</label>
+                                <input type="number" x-model="config.settings.video.resolution.width" class="w-full border border-gray-300 rounded-md px-3 py-2 focus:ring-2 focus:ring-purple-500 focus:border-transparent">
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-1">高度</label>
+                                <input type="number" x-model="config.settings.video.resolution.height" class="w-full border border-gray-300 rounded-md px-3 py-2 focus:ring-2 focus:ring-purple-500 focus:border-transparent">
+                            </div>
+                        </div>
+
+                        <!-- FPS -->
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-1">帧率 (FPS)</label>
+                            <input type="number" x-model="config.settings.video.fps" class="w-full border border-gray-300 rounded-md px-3 py-2 focus:ring-2 focus:ring-purple-500 focus:border-transparent">
+                        </div>
+
+                        <!-- Output Format -->
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-1">输出格式</label>
+                            <select x-model="config.settings.video.output_format" class="w-full border border-gray-300 rounded-md px-3 py-2 focus:ring-2 focus:ring-purple-500 focus:border-transparent">
+                                <option value="mp4">MP4</option>
+                                <option value="avi">AVI</option>
+                                <option value="mov">MOV</option>
+                            </select>
+                        </div>
+
+                        <!-- Codec -->
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-1">编码器</label>
+                            <select x-model="config.settings.video.codec" class="w-full border border-gray-300 rounded-md px-3 py-2 focus:ring-2 focus:ring-purple-500 focus:border-transparent">
+                                <option value="libx264">H.264 (libx264)</option>
+                                <option value="libx265">H.265 (libx265)</option>
+                                <option value="mpeg4">MPEG-4</option>
+                            </select>
+                        </div>
+
+                        <!-- Bitrate -->
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-1">比特率</label>
+                            <input type="text" x-model="config.settings.video.bitrate" class="w-full border border-gray-300 rounded-md px-3 py-2 focus:ring-2 focus:ring-purple-500 focus:border-transparent" placeholder="3000k">
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 字幕配置 -->
+                <div x-show="activeSection === 'settings.subtitle'">
+                    <h2 class="text-2xl font-bold mb-6 text-gray-800">📝 字幕配置</h2>
+                    <div class="space-y-4">
+                        <!-- Font -->
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-1">字体</label>
+                            <input type="text" x-model="config.settings.subtitle.font" class="w-full border border-gray-300 rounded-md px-3 py-2 focus:ring-2 focus:ring-purple-500 focus:border-transparent">
+                        </div>
+
+                        <!-- Font Size -->
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-1">字号</label>
+                            <input type="number" x-model="config.settings.subtitle.font_size" class="w-full border border-gray-300 rounded-md px-3 py-2 focus:ring-2 focus:ring-purple-500 focus:border-transparent">
+                        </div>
+
+                        <!-- Font Color -->
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-1">字体颜色</label>
+                            <input type="text" x-model="config.settings.subtitle.font_color" class="w-full border border-gray-300 rounded-md px-3 py-2 focus:ring-2 focus:ring-purple-500 focus:border-transparent" placeholder="white">
+                        </div>
+
+                        <!-- Position -->
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-1">位置</label>
+                            <select x-model="config.settings.subtitle.position" class="w-full border border-gray-300 rounded-md px-3 py-2 focus:ring-2 focus:ring-purple-500 focus:border-transparent">
+                                <option value="top">顶部</option>
+                                <option value="middle">居中</option>
+                                <option value="bottom">底部</option>
+                            </select>
+                        </div>
+
+                        <!-- BG Opacity -->
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-1">背景透明度: <span x-text="config.settings.subtitle.bg_opacity"></span></label>
+                            <input type="range" x-model="config.settings.subtitle.bg_opacity" min="0" max="1" step="0.1" class="w-full">
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 路径配置 -->
+                <div x-show="activeSection === 'settings.paths'">
+                    <h2 class="text-2xl font-bold mb-6 text-gray-800">📁 路径配置</h2>
+                    <div class="space-y-4">
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-1">素材目录</label>
+                            <input type="text" x-model="config.settings.paths.materials" class="w-full border border-gray-300 rounded-md px-3 py-2 focus:ring-2 focus:ring-purple-500 focus:border-transparent">
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-1">模板目录</label>
+                            <input type="text" x-model="config.settings.paths.templates" class="w-full border border-gray-300 rounded-md px-3 py-2 focus:ring-2 focus:ring-purple-500 focus:border-transparent">
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-1">输出目录</label>
+                            <input type="text" x-model="config.settings.paths.output" class="w-full border border-gray-300 rounded-md px-3 py-2 focus:ring-2 focus:ring-purple-500 focus:border-transparent">
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-1">脚本目录</label>
+                            <input type="text" x-model="config.settings.paths.scripts" class="w-full border border-gray-300 rounded-md px-3 py-2 focus:ring-2 focus:ring-purple-500 focus:border-transparent">
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-1">字幕目录</label>
+                            <input type="text" x-model="config.settings.paths.subtitles" class="w-full border border-gray-300 rounded-md px-3 py-2 focus:ring-2 focus:ring-purple-500 focus:border-transparent">
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-1">视频目录</label>
+                            <input type="text" x-model="config.settings.paths.videos" class="w-full border border-gray-300 rounded-md px-3 py-2 focus:ring-2 focus:ring-purple-500 focus:border-transparent">
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-1">音频目录</label>
+                            <input type="text" x-model="config.settings.paths.audio" class="w-full border border-gray-300 rounded-md px-3 py-2 focus:ring-2 focus:ring-purple-500 focus:border-transparent">
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 素材源配置 -->
+                <div x-show="activeSection === 'settings.materials'">
+                    <h2 class="text-2xl font-bold mb-6 text-gray-800">🔌 素材源配置</h2>
+
+                    <!-- Pexels -->
+                    <div class="mb-8">
+                        <h3 class="text-lg font-semibold mb-4">Pexels</h3>
+                        <div class="space-y-4">
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-1">API密钥</label>
+                                <input type="password" x-model="config.settings.pexels.api_key" class="w-full border border-gray-300 rounded-md px-3 py-2 focus:ring-2 focus:ring-purple-500 focus:border-transparent">
+                                <p class="text-xs text-gray-500 mt-1">免费申请: https://www.pexels.com/api/</p>
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-1">每小时请求限制</label>
+                                <input type="number" x-model="config.settings.pexels.rate_limit_per_hour" class="w-full border border-gray-300 rounded-md px-3 py-2 focus:ring-2 focus:ring-purple-500 focus:border-transparent">
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Unsplash -->
+                    <div>
+                        <h3 class="text-lg font-semibold mb-4">Unsplash</h3>
+                        <div class="space-y-4">
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-1">Access Key</label>
+                                <input type="password" x-model="config.settings.unsplash.access_key" class="w-full border border-gray-300 rounded-md px-3 py-2 focus:ring-2 focus:ring-purple-500 focus:border-transparent">
+                                <p class="text-xs text-gray-500 mt-1">免费注册: https://unsplash.com/developers</p>
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-1">每小时请求限制</label>
+                                <input type="number" x-model="config.settings.unsplash.rate_limit_per_hour" class="w-full border border-gray-300 rounded-md px-3 py-2 focus:ring-2 focus:ring-purple-500 focus:border-transparent">
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Templates配置 -->
+                <div x-show="activeSection.startsWith('templates.')">
+                    <h2 class="text-2xl font-bold mb-6 text-gray-800" x-text="getSectionTitle()"></h2>
+
+                    <!-- 脚本模板编辑 -->
+                    <div x-show="activeSection === 'templates.script_templates'" class="space-y-6">
+                        <div class="flex justify-between items-center mb-4">
+                            <p class="text-gray-600">管理脚本生成模板，定义视频的结构和章节</p>
+                            <button @click="addScriptTemplate()" class="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 text-sm">
+                                ➕ 添加新模板
+                            </button>
+                        </div>
+
+                        <template x-for="(template, templateKey) in config.templates.script_templates" :key="templateKey">
+                            <div class="border border-gray-200 rounded-lg p-6 bg-white">
+                                <div class="flex justify-between items-start mb-4">
+                                    <div class="flex-1 grid grid-cols-2 gap-4">
+                                        <div>
+                                            <label class="block text-sm font-medium text-gray-700 mb-1">模板ID</label>
+                                            <input type="text" x-model="templateKey" readonly
+                                                   class="w-full border border-gray-300 rounded-md px-3 py-2 bg-gray-50 text-gray-500">
+                                        </div>
+                                        <div>
+                                            <label class="block text-sm font-medium text-gray-700 mb-1">模板名称</label>
+                                            <input type="text" x-model="template.name" class="w-full border border-gray-300 rounded-md px-3 py-2 focus:ring-2 focus:ring-purple-500">
+                                        </div>
+                                    </div>
+                                    <button @click="deleteScriptTemplate(templateKey)" class="text-red-600 hover:text-red-800 text-sm ml-4">
+                                        🗑️ 删除
+                                    </button>
+                                </div>
+
+                                <div class="mb-4">
+                                    <label class="block text-sm font-medium text-gray-700 mb-1">模板描述</label>
+                                    <textarea x-model="template.description" rows="2"
+                                              class="w-full border border-gray-300 rounded-md px-3 py-2 focus:ring-2 focus:ring-purple-500"></textarea>
+                                </div>
+
+                                <div class="space-y-4">
+                                    <h4 class="font-semibold text-gray-800">章节结构</h4>
+                                    <template x-for="(section, index) in template.structure" :key="index">
+                                        <div class="border border-gray-200 rounded-md p-4 bg-gray-50">
+                                            <div class="flex justify-between items-center mb-3">
+                                                <h5 class="font-medium text-gray-700" x-text="'章节 ' + (index + 1) + ': ' + section.name"></h5>
+                                                <button @click="template.structure.splice(index, 1)" class="text-red-600 hover:text-red-800 text-sm">
+                                                    删除章节
+                                                </button>
+                                            </div>
+
+                                            <div class="grid grid-cols-3 gap-4 mb-3">
+                                                <div>
+                                                    <label class="block text-xs font-medium text-gray-600 mb-1">章节ID</label>
+                                                    <input type="text" x-model="section.section" class="w-full border border-gray-300 rounded-md px-2 py-1 text-sm">
+                                                </div>
+                                                <div>
+                                                    <label class="block text-xs font-medium text-gray-600 mb-1">章节名称</label>
+                                                    <input type="text" x-model="section.name" class="w-full border border-gray-300 rounded-md px-2 py-1 text-sm">
+                                                </div>
+                                                <div>
+                                                    <label class="block text-xs font-medium text-gray-600 mb-1">建议时长</label>
+                                                    <input type="text" x-model="section.duration" class="w-full border border-gray-300 rounded-md px-2 py-1 text-sm" placeholder="如: 30-45秒">
+                                                </div>
+                                            </div>
+
+                                            <div>
+                                                <label class="block text-xs font-medium text-gray-600 mb-1">章节提示词</label>
+                                                <textarea x-model="section.prompt" rows="3"
+                                                          class="w-full border border-gray-300 rounded-md px-2 py-1 text-sm focus:ring-2 focus:ring-purple-500"></textarea>
+                                            </div>
+                                        </div>
+                                    </template>
+
+                                    <button @click="addSectionToTemplate(templateKey)" class="w-full py-2 border-2 border-dashed border-gray-300 rounded-lg text-gray-600 hover:border-purple-500 hover:text-purple-600">
+                                        ➕ 添加新章节
+                                    </button>
+                                </div>
+                            </div>
+                        </template>
+                    </div>
+
+                    <!-- 提示词模板编辑 -->
+                    <div x-show="activeSection === 'templates.prompt_templates'" class="space-y-6">
+                        <div class="flex justify-between items-center mb-4">
+                            <p class="text-gray-600">管理AI提示词模板，控制AI生成行为</p>
+                            <button @click="addPromptTemplate()" class="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 text-sm">
+                                ➕ 添加新提示词
+                            </button>
+                        </div>
+
+                        <template x-for="(prompt, promptKey) in config.templates.prompt_templates" :key="promptKey">
+                            <div class="border border-gray-200 rounded-lg p-6 bg-white">
+                                <div class="flex justify-between items-start mb-4">
+                                    <div class="flex-1">
+                                        <label class="block text-sm font-medium text-gray-700 mb-1">提示词名称</label>
+                                        <input type="text" x-model="promptKey" readonly
+                                               class="w-full border border-gray-300 rounded-md px-3 py-2 bg-gray-50 text-gray-500 font-mono text-sm">
+                                    </div>
+                                    <button @click="deletePromptTemplate(promptKey)" class="text-red-600 hover:text-red-800 text-sm ml-4">
+                                        🗑️ 删除
+                                    </button>
+                                </div>
+
+                                <div>
+                                    <label class="block text-sm font-medium text-gray-700 mb-1">提示词内容</label>
+                                    <p class="text-xs text-gray-500 mb-2">可以使用变量如 {topic}, {audience}, {duration} 等</p>
+                                    <textarea x-model="config.templates.prompt_templates[promptKey]" rows="10"
+                                              class="w-full border border-gray-300 rounded-md px-3 py-2 focus:ring-2 focus:ring-purple-500 font-mono text-sm"></textarea>
+                                </div>
+                            </div>
+                        </template>
+                    </div>
+
+                    <!-- 视觉模板编辑 -->
+                    <div x-show="activeSection === 'templates.visual_templates'" class="space-y-6">
+                        <p class="text-gray-600 mb-4">配置片头、片尾和转场效果</p>
+
+                        <!-- Intro -->
+                        <div class="border border-gray-200 rounded-lg p-6 bg-white">
+                            <h4 class="font-semibold text-gray-800 mb-4">🎬 片头</h4>
+                            <div class="grid grid-cols-2 gap-4 mb-4">
+                                <div>
+                                    <label class="block text-sm font-medium text-gray-700 mb-1">时长（秒）</label>
+                                    <input type="number" step="0.5" x-model="config.templates.visual_templates.intro.duration"
+                                           class="w-full border border-gray-300 rounded-md px-3 py-2">
+                                </div>
+                            </div>
+
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-1">包含元素（每行一个）</label>
+                                <template x-for="(element, index) in config.templates.visual_templates.intro.elements" :key="index">
+                                    <div class="flex gap-2 mb-2">
+                                        <input type="text" x-model="config.templates.visual_templates.intro.elements[index]"
+                                               class="flex-1 border border-gray-300 rounded-md px-3 py-2">
+                                        <button @click="config.templates.visual_templates.intro.elements.splice(index, 1)"
+                                                class="text-red-600 hover:text-red-800">✕</button>
+                                    </div>
+                                </template>
+                                <button @click="config.templates.visual_templates.intro.elements.push('')"
+                                        class="mt-2 text-sm text-purple-600 hover:text-purple-800">
+                                    ➕ 添加元素
+                                </button>
+                            </div>
+                        </div>
+
+                        <!-- Outro -->
+                        <div class="border border-gray-200 rounded-lg p-6 bg-white">
+                            <h4 class="font-semibold text-gray-800 mb-4">🎭 片尾</h4>
+                            <div class="grid grid-cols-2 gap-4 mb-4">
+                                <div>
+                                    <label class="block text-sm font-medium text-gray-700 mb-1">时长（秒）</label>
+                                    <input type="number" step="0.5" x-model="config.templates.visual_templates.outro.duration"
+                                           class="w-full border border-gray-300 rounded-md px-3 py-2">
+                                </div>
+                            </div>
+
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-1">包含元素（每行一个）</label>
+                                <template x-for="(element, index) in config.templates.visual_templates.outro.elements" :key="index">
+                                    <div class="flex gap-2 mb-2">
+                                        <input type="text" x-model="config.templates.visual_templates.outro.elements[index]"
+                                               class="flex-1 border border-gray-300 rounded-md px-3 py-2">
+                                        <button @click="config.templates.visual_templates.outro.elements.splice(index, 1)"
+                                                class="text-red-600 hover:text-red-800">✕</button>
+                                    </div>
+                                </template>
+                                <button @click="config.templates.visual_templates.outro.elements.push('')"
+                                        class="mt-2 text-sm text-purple-600 hover:text-purple-800">
+                                    ➕ 添加元素
+                                </button>
+                            </div>
+                        </div>
+
+                        <!-- Transition -->
+                        <div class="border border-gray-200 rounded-lg p-6 bg-white">
+                            <h4 class="font-semibold text-gray-800 mb-4">🔄 转场效果</h4>
+                            <div class="grid grid-cols-2 gap-4">
+                                <div>
+                                    <label class="block text-sm font-medium text-gray-700 mb-1">默认时长（秒）</label>
+                                    <input type="number" step="0.1" x-model="config.templates.visual_templates.transition.duration"
+                                           class="w-full border border-gray-300 rounded-md px-3 py-2">
+                                </div>
+                                <div>
+                                    <label class="block text-sm font-medium text-gray-700 mb-1">可用转场类型（逗号分隔）</label>
+                                    <input type="text" x-model="transitionTypesString"
+                                           @input="updateTransitionTypes($event.target.value)"
+                                           class="w-full border border-gray-300 rounded-md px-3 py-2"
+                                           placeholder="淡入淡出, 左右滑动, 缩放">
+                                </div>
+                            </div>
+
+                            <div class="mt-4">
+                                <p class="text-sm text-gray-600 mb-2">当前转场类型：</p>
+                                <div class="flex flex-wrap gap-2">
+                                    <template x-for="(type, index) in config.templates.visual_templates.transition.types" :key="index">
+                                        <span class="inline-flex items-center gap-1 px-3 py-1 bg-purple-100 text-purple-800 rounded-full text-sm">
+                                            <span x-text="type"></span>
+                                            <button @click="config.templates.visual_templates.transition.types.splice(index, 1)"
+                                                    class="text-purple-600 hover:text-purple-800 ml-1">✕</button>
+                                        </span>
+                                    </template>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 成功/错误提示 -->
+                <div x-show="error" class="mt-6 p-4 bg-red-100 border border-red-400 text-red-700 rounded-lg" x-transition>
+                    <strong>错误：</strong> <span x-text="error"></span>
+                </div>
+
+                <div x-show="success" class="mt-6 p-4 bg-green-100 border border-green-400 text-green-700 rounded-lg" x-transition>
+                    <span x-text="success"></span>
+                </div>
+
+                <!-- 操作按钮 -->
+                <div class="mt-8 flex gap-4 border-t pt-6">
+                    <button @click="saveConfig()" :disabled="saving" class="flex-1 bg-purple-600 text-white py-3 px-6 rounded-lg hover:bg-purple-700 disabled:opacity-50 font-medium">
+                        <span x-show="!saving">💾 保存配置</span>
+                        <span x-show="saving">保存中...</span>
+                    </button>
+                    <button @click="loadConfig()" class="px-6 py-3 border border-gray-300 rounded-lg hover:bg-gray-50 font-medium">
+                        🔄 重置
+                    </button>
+                </div>
+            </div>
+            </template>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+function configManager() {
+    return {
+        // 状态
+        activeSection: 'settings.ai',
+        config: {
+            settings: {
+                ai: {},
+                tts: {},
+                ai_image: {},
+                video: { resolution: {}, codec: '', output_format: '', bitrate: '', fps: 24 },
+                subtitle: {},
+                paths: {},
+                pexels: {},
+                unsplash: {}
+            },
+            templates: {
+                script_templates: {},
+                prompt_templates: {},
+                visual_templates: {
+                    intro: { duration: 3, elements: [] },
+                    outro: { duration: 5, elements: [] },
+                    transition: { duration: 0.5, types: [] }
+                }
+            }
+        },
+        originalConfig: {},
+        loading: false,
+        saving: false,
+        testingApi: false,
+        error: '',
+        success: '',
+
+        // 初始化
+        async init() {
+            await this.loadConfig();
+            this.updateTransitionTypesString();
+        },
+
+        // 加载配置
+        async loadConfig() {
+            this.loading = true;
+            this.error = '';
+            this.success = '';
+
+            try {
+                const response = await fetch('/api/config/');
+                const data = await response.json();
+
+                if (data.success) {
+                    this.config = data.data;
+                    this.originalConfig = JSON.parse(JSON.stringify(data.data));
+                } else {
+                    this.error = '加载配置失败: ' + data.message;
+                }
+            } catch (e) {
+                this.error = '加载配置失败: ' + e.message;
+            } finally {
+                this.loading = false;
+            }
+        },
+
+        // 保存配置
+        async saveConfig() {
+            this.saving = true;
+            this.error = '';
+            this.success = '';
+
+            try {
+                // 解析当前激活的配置区块
+                const [configType, section] = this.activeSection.split('.');
+
+                if (configType === 'settings') {
+                    // 获取原始配置中的区块路径
+                    const sectionPath = section.split('_').slice(1).join('_'); // 移除'ai'前缀
+                    const updates = this.extractUpdates(section);
+
+                    const response = await fetch('/api/config/settings', {
+                        method: 'PUT',
+                        headers: {'Content-Type': 'application/json'},
+                        body: JSON.stringify({
+                            section: section,
+                            updates: updates,
+                            create_backup: true
+                        })
+                    });
+
+                    const data = await response.json();
+
+                    if (data.success) {
+                        this.success = data.message;
+                        this.originalConfig = JSON.parse(JSON.stringify(this.config));
+                    } else {
+                        this.error = data.message || '保存失败';
+                    }
+                } else if (configType === 'templates') {
+                    // 保存templates配置
+                    const updates = this.extractTemplateUpdates(section);
+
+                    const response = await fetch('/api/config/templates', {
+                        method: 'PUT',
+                        headers: {'Content-Type': 'application/json'},
+                        body: JSON.stringify({
+                            section: section,
+                            updates: updates,
+                            create_backup: true
+                        })
+                    });
+
+                    const data = await response.json();
+
+                    if (data.success) {
+                        this.success = data.message;
+                        this.originalConfig = JSON.parse(JSON.stringify(this.config));
+                    } else {
+                        this.error = data.message || '保存失败';
+                    }
+                }
+            } catch (e) {
+                this.error = '保存配置失败: ' + e.message;
+            } finally {
+                this.saving = false;
+
+                // 3秒后清除成功消息
+                if (this.success) {
+                    setTimeout(() => {
+                        this.success = '';
+                    }, 3000);
+                }
+            }
+        },
+
+        // 提取要更新的字段
+        extractUpdates(section) {
+            const updates = {};
+
+            if (section === 'ai') {
+                Object.assign(updates, this.config.settings.ai);
+            } else if (section === 'tts') {
+                Object.assign(updates, this.config.settings.tts);
+            } else if (section === 'ai_image') {
+                Object.assign(updates, this.config.settings.ai_image);
+            } else if (section === 'video') {
+                Object.assign(updates, this.config.settings.video);
+            } else if (section === 'subtitle') {
+                Object.assign(updates, this.config.settings.subtitle);
+            } else if (section === 'paths') {
+                Object.assign(updates, this.config.settings.paths);
+            } else if (section === 'materials') {
+                updates.pexels = this.config.settings.pexels;
+                updates.unsplash = this.config.settings.unsplash;
+            }
+
+            return updates;
+        },
+
+        // 切换配置区块
+        switchSection(section) {
+            this.activeSection = section;
+            this.error = '';
+            this.success = '';
+        },
+
+        // 测试API
+        async testApi(section) {
+            this.testingApi = true;
+            this.error = '';
+            this.success = '';
+
+            try {
+                let request;
+
+                if (section === 'ai') {
+                    request = {
+                        provider: this.config.settings.ai.provider,
+                        api_key: this.config.settings.ai.api_key,
+                        base_url: this.config.settings.ai.base_url,
+                        model: this.config.settings.ai.model
+                    };
+                }
+
+                const response = await fetch('/api/config/test-api', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify(request)
+                });
+
+                const data = await response.json();
+
+                if (data.success) {
+                    this.success = '✅ ' + data.message;
+                } else {
+                    this.error = '❌ ' + data.message;
+                }
+            } catch (e) {
+                this.error = '测试失败: ' + e.message;
+            } finally {
+                this.testingApi = false;
+
+                // 5秒后清除消息
+                setTimeout(() => {
+                    if (this.success.startsWith('✅')) {
+                        this.success = '';
+                    }
+                }, 5000);
+            }
+        },
+
+        // 获取当前模板配置
+        getCurrentTemplateConfig() {
+            const [, sectionType] = this.activeSection.split('.');
+            return this.config.templates[sectionType] || {};
+        },
+
+        // 获取区块标题
+        getSectionTitle() {
+            const titles = {
+                'templates.script_templates': '📜 脚本模板',
+                'templates.prompt_templates': '💬 提示词模板',
+                'templates.visual_templates': '🎭 视觉模板'
+            };
+            return titles[this.activeSection] || '模板配置';
+        },
+
+        // 提取templates更新
+        extractTemplateUpdates(section) {
+            return this.config.templates[section];
+        },
+
+        // 添加脚本模板
+        addScriptTemplate() {
+            const newId = prompt('请输入新模板的ID（英文，如：my_template）');
+            if (!newId) return;
+
+            if (this.config.templates.script_templates[newId]) {
+                alert('模板ID已存在，请使用其他ID');
+                return;
+            }
+
+            this.config.templates.script_templates[newId] = {
+                name: '新模板',
+                description: '模板描述',
+                structure: [
+                    {
+                        section: 'intro',
+                        name: '开场',
+                        duration: '10-15秒',
+                        prompt: '开场白内容...'
+                    }
+                ]
+            };
+        },
+
+        // 删除脚本模板
+        deleteScriptTemplate(templateKey) {
+            if (confirm(`确定要删除模板"${templateKey}"吗？`)) {
+                delete this.config.templates.script_templates[templateKey];
+            }
+        },
+
+        // 添加章节到模板
+        addSectionToTemplate(templateKey) {
+            const template = this.config.templates.script_templates[templateKey];
+            if (template && template.structure) {
+                template.structure.push({
+                    section: 'new_section',
+                    name: '新章节',
+                    duration: '30秒',
+                    prompt: '章节内容...'
+                });
+            }
+        },
+
+        // 添加提示词模板
+        addPromptTemplate() {
+            const newId = prompt('请输入新提示词的ID（英文，如：my_prompt）');
+            if (!newId) return;
+
+            if (this.config.templates.prompt_templates[newId]) {
+                alert('提示词ID已存在，请使用其他ID');
+                return;
+            }
+
+            this.config.templates.prompt_templates[newId] = '请输入提示词内容...';
+        },
+
+        // 删除提示词模板
+        deletePromptTemplate(promptKey) {
+            if (confirm(`确定要删除提示词"${promptKey}"吗？`)) {
+                delete this.config.templates.prompt_templates[promptKey];
+            }
+        },
+
+        // 转场类型字符串（在init中初始化）
+        transitionTypesString: '',
+
+        // 更新转场类型
+        updateTransitionTypes(value) {
+            if (!this.config.templates.visual_templates) return;
+            if (!this.config.templates.visual_templates.transition) return;
+
+            const types = value.split(',').map(t => t.trim()).filter(t => t);
+            this.config.templates.visual_templates.transition.types = types;
+        },
+
+        // 更新转场类型字符串
+        updateTransitionTypesString() {
+            if (this.config.templates.visual_templates &&
+                this.config.templates.visual_templates.transition &&
+                this.config.templates.visual_templates.transition.types) {
+                this.transitionTypesString = this.config.templates.visual_templates.transition.types.join(', ');
+            }
+        }
+    };
+}
+</script>
+{% endblock %}

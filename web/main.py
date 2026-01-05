@@ -17,7 +17,7 @@ sys.path.insert(0, str(project_root))
 
 # 导入API路由
 from web.api import topics, scripts, videos, materials, history
-from web.api import tts_and_subtitles
+from web.api import tts_and_subtitles, config
 
 # 创建FastAPI应用
 app = FastAPI(
@@ -65,6 +65,7 @@ app.include_router(materials.router)
 app.include_router(history.router)
 app.include_router(tts_and_subtitles.tts_router)
 app.include_router(tts_and_subtitles.subtitle_router)
+app.include_router(config.router)
 
 
 # ==================== WebSocket端点 ====================
@@ -147,6 +148,14 @@ async def history_page(request: Request):
     return templates.TemplateResponse("history.html", {"request": request})
 
 
+@app.get("/config", response_class=HTMLResponse, tags=["页面"])
+async def config_page(request: Request):
+    """
+    系统配置页面
+    """
+    return templates.TemplateResponse("config.html", {"request": request})
+
+
 @app.get("/test-styles", response_class=HTMLResponse, tags=["页面"])
 async def test_styles_page(request: Request):
     """
@@ -179,7 +188,20 @@ async def startup_event():
     print(f"📖 版本: 5.0.0")
     print(f"🌐 API文档: http://localhost:8000/api/docs")
     print(f"🏠 首页: http://localhost:8000/")
+    print(f"⚙️  配置: http://localhost:8000/config")
     print("=" * 60)
+
+    # 确保配置备份目录存在
+    backup_dir = project_root / "config" / "backups"
+    backup_dir.mkdir(exist_ok=True)
+    print(f"✅ 配置备份目录: {backup_dir}")
+
+    # 设置配置文件安全权限
+    settings_file = project_root / "config" / "settings.json"
+    if settings_file.exists():
+        import os
+        os.chmod(settings_file, 0o600)  # 仅所有者可读写
+        print("✅ 配置文件权限已设置 (600)")
 
     # 验证项目配置
     try:

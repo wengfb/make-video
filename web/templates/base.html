@@ -66,6 +66,10 @@
                        class="hover:text-purple-200 transition {% if '/history' in request.url.path %}font-bold border-b-2 border-white{% endif %}">
                         📊 历史
                     </a>
+                    <a href="/config"
+                       class="hover:text-purple-200 transition {% if '/config' in request.url.path %}font-bold border-b-2 border-white{% endif %}">
+                        ⚙️ 配置
+                    </a>
                 </div>
 
                 <!-- 移动端菜单按钮 -->
@@ -89,6 +93,7 @@
                 <a href="/materials" class="block py-2 px-4 hover:bg-white/20 rounded">🎨 素材</a>
                 <a href="/videos" class="block py-2 px-4 hover:bg-white/20 rounded">🎥 视频</a>
                 <a href="/history" class="block py-2 px-4 hover:bg-white/20 rounded">📊 历史</a>
+                <a href="/config" class="block py-2 px-4 hover:bg-white/20 rounded">⚙️ 配置</a>
             </div>
         </div>
     </nav>
