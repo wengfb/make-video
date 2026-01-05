@@ -296,7 +296,7 @@ function materialManager() {
                 });
 
                 if (this.searchQuery) params.append('search', this.searchQuery);
-                if (this.filterType) params.append('type', this.filterType);
+                if (this.filterType) params.append('material_type', this.filterType);
                 if (this.filterCategory) params.append('category', this.filterCategory);
 
                 const response = await fetch(`/api/materials/?${params}`);
