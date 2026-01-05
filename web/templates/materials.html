@@ -339,8 +339,21 @@ function materialManager() {
             this.uploading = true;
 
             try {
+                // 自动检测文件类型
+                const file = this.uploadForm.file;
+                let materialType = 'image'; // 默认类型
+
+                if (file.type.startsWith('video/')) {
+                    materialType = 'video';
+                } else if (file.type.startsWith('audio/')) {
+                    materialType = 'audio';
+                } else if (file.type.startsWith('image/')) {
+                    materialType = 'image';
+                }
+
                 const formData = new FormData();
-                formData.append('file', this.uploadForm.file);
+                formData.append('file', file);
+                formData.append('material_type', materialType);
                 formData.append('name', this.uploadForm.name);
                 formData.append('category', this.uploadForm.category);
                 formData.append('tags', this.uploadForm.tags);

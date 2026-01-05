@@ -5,6 +5,7 @@
 from fastapi import APIRouter, UploadFile, File, Form, Query
 from pydantic import BaseModel, Field
 from typing import Optional, List
+from pathlib import Path
 from web.services.material_service import get_material_service
 
 
@@ -53,7 +54,6 @@ async def upload_material(
             shutil.copyfileobj(file.file, buffer)
 
         temp_path = temp_file.name
-        temp_path.close()
 
         # 解析标签
         tag_list = [t.strip() for t in tags.split(",")] if tags else []
